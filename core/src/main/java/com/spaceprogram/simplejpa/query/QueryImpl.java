@@ -244,19 +244,11 @@ public class QueryImpl implements SimpleQuery {
         sb.append(" ");
         sb.append("IN");
         sb.append(" (");
-        boolean quoteParam = true;
-        int i = 0;
-        for (String param : params) {
-            if (i > 0) {
+        for(int i = 0; i < params.size(); i++){
+            if(i != 0){
                 sb.append(",");
             }
-            if (quoteParam) {
-                sb.append("'");
-            }
-            sb.append(param);
-            if (quoteParam) {
-                sb.append("'");
-            }
+            sb.append("'").append(params.get(i)).append("'");
         }
         sb.append(")");
     }
@@ -401,9 +393,7 @@ public class QueryImpl implements SimpleQuery {
                 param = AmazonSimpleDBUtil.encodeDate(x);
             } else { // string
                 param = EscapeUtils.escapeQueryParam(paramOb.toString());
-                if (param.startsWith("%")) {
-                    throw new PersistenceException("SimpleDB only supports a wildcard query on the right side of the value (ie: starts-with).");
-                }
+                //amazon now supports like queries starting with %
             }
         }
         return "'" + param + "'";
