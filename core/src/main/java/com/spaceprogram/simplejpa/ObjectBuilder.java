@@ -182,21 +182,25 @@ public class ObjectBuilder {
             foreignKeyFieldName = attName;
         }
         AnnotationInfo ai = em.getFactory().getAnnotationManager().getAnnotationInfo(typeInList);
-        // System.out.println("root class= " + ai.getRootClass());
         Method getterForReference = ai.getGetter(foreignKeyFieldName);
         Class refType = getterForReference.getReturnType();
         AnnotationInfo refAi = em.getAnnotationManager().getAnnotationInfo(refType);
-        String foreignIdAttr = NamingHelper.attributeName(refAi.getIdMethod());
-        String query = "select * from " + ai.getMainClass().getSimpleName() + " o where o." + foreignKeyFieldName + "." + foreignIdAttr + " = '" + id + "'";
+        String query = createOneToManyQuery(typeInList, foreignKeyFieldName, refAi, id, orderBy);
         
+        logger.finer("OneToMany query=" + query);
+        return new QueryImpl(em, query);
+    }
+
+    static String createOneToManyQuery(Class typeInList, String foreignKeyFieldName, AnnotationInfo refAi, Object id, OrderBy orderBy) {
+        String foreignIdAttr = NamingHelper.attributeName(refAi.getIdMethod());
+        String query = "select o from " + typeInList.getName() + " o where o." + foreignKeyFieldName + "." + foreignIdAttr + " = '" + id + "'";
+
         if (orderBy != null)
         {
         	query += " and o." + orderBy.value().split("\\s")[0] + " is not null";
         	query += " order by o." + orderBy.value();
         }
-        
-        logger.finer("OneToMany query=" + query);
-        return new QueryImpl(em, query);
+        return query;
     }
 
 

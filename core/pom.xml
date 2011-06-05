@@ -10,6 +10,14 @@
     <developerConnection>scm:svn:https://simplejpa.googlecode.com/svn/trunk</developerConnection>
     <url>http://code.google.com/p/simplejpa/source/browse/trunk</url>
   </scm>
+  <distributionManagement>
+    <!-- temporary home for snapshots until something better can be found -->
+    <repository>
+      <id>overcomplified</id>
+      <name>Overcomplified 3rd party snapshot repository</name>
+      <url>http://repository.overcomplified.com/content/repositories/thirdpartysnapshots</url>
+    </repository>
+  </distributionManagement>
   <dependencies>
     <dependency>
       <groupId>commons-lang</groupId>
@@ -38,6 +46,18 @@
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
       <version>4.8.1</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.unitils</groupId>
+      <artifactId>unitils-core</artifactId>
+      <version>3.1</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.unitils</groupId>
+      <artifactId>unitils-mock</artifactId>
+      <version>3.1</version>
       <scope>test</scope>
     </dependency>
     <dependency>
