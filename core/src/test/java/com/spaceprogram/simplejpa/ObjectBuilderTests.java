@@ -5,8 +5,7 @@ import org.unitils.mock.*;
 import static org.junit.Assert.*;
 import org.junit.Test;
 
-import javax.persistence.OrderBy;
-import java.lang.reflect.Method;
+import java.util.*;
 
 /**
  * Initial set of unit tests for ObjectBuilder
@@ -14,11 +13,24 @@ import java.lang.reflect.Method;
  */
 public class ObjectBuilderTests extends UnitilsJUnit4{
     Mock<AnnotationInfo> refInfo;
-    Mock<OrderBy> orderBy;
+
+    @Test
+    public void testGetOrdinalEnumValue() throws NoSuchMethodException {
+        PersistentMethod method = new PersistentMethod(MyTestObject.class.getDeclaredMethod("getMyEnumOrdinal"));
+        assertEquals(MyEnum.me, ObjectBuilder.getEnumValue(method, "0"));
+        assertEquals(MyEnum.myself, ObjectBuilder.getEnumValue(method, "1"));
+    }
+
+    @Test
+    public void testGetStringEnumValue() throws NoSuchMethodException {
+        PersistentMethod method = new PersistentMethod(MyTestObject.class.getDeclaredMethod("getMyEnumString"));
+        assertEquals(MyEnum.me, ObjectBuilder.getEnumValue(method, "me"));
+        assertEquals(MyEnum.myself, ObjectBuilder.getEnumValue(method, "myself"));
+    }
 
     @Test
     public void testCreateSimpleOneToManyQuery() throws NoSuchMethodException {
-        refInfo.returns(MySuperClass.class.getDeclaredMethod("getId")).getIdMethod();
+        refInfo.returns(new PersistentMethod(MySuperClass.class.getDeclaredMethod("getId"))).getIdMethod();
         refInfo.returns(MyTestObject2.class).getMainClass();
 
         String query = ObjectBuilder.createOneToManyQuery(MyTestObject.class, "fkField", refInfo.getMock(), "Value", null);
@@ -27,11 +39,11 @@ public class ObjectBuilderTests extends UnitilsJUnit4{
 
     @Test
     public void testCreateOneToManyWithOrderBy() throws NoSuchMethodException {
-        refInfo.returns(MySuperClass.class.getDeclaredMethod("getId")).getIdMethod();
+        refInfo.returns(new PersistentMethod(MySuperClass.class.getDeclaredMethod("getId"))).getIdMethod();
         refInfo.returns(MyTestObject2.class).getMainClass();
-        orderBy.returns("orderField ASC").value();
+        PersistentProperty.OrderClause orderBy = new PersistentProperty.OrderClause("orderField", PersistentProperty.OrderClause.Order.ASC);
 
-        String query = ObjectBuilder.createOneToManyQuery(MyTestObject.class, "fkField", refInfo.getMock(), "Value", orderBy.getMock());
+        String query = ObjectBuilder.createOneToManyQuery(MyTestObject.class, "fkField", refInfo.getMock(), "Value", Arrays.asList(orderBy));
         assertEquals(query, "select o from com.spaceprogram.simplejpa.MyTestObject o where o.fkField.id = 'Value' and o.orderField is not null order by o.orderField ASC");
     }
 }

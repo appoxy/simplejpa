@@ -27,12 +27,7 @@ import com.amazonaws.services.simpledb.model.Attribute;
 import com.amazonaws.services.simpledb.model.Item;
 import com.amazonaws.services.simpledb.model.NoSuchDomainException;
 import com.amazonaws.services.simpledb.model.SelectResult;
-import com.spaceprogram.simplejpa.AnnotationInfo;
-import com.spaceprogram.simplejpa.DomainHelper;
-import com.spaceprogram.simplejpa.EntityManagerFactoryImpl;
-import com.spaceprogram.simplejpa.EntityManagerSimpleJPA;
-import com.spaceprogram.simplejpa.LazyList;
-import com.spaceprogram.simplejpa.NamingHelper;
+import com.spaceprogram.simplejpa.*;
 import com.spaceprogram.simplejpa.util.AmazonSimpleDBUtil;
 import com.spaceprogram.simplejpa.util.EscapeUtils;
 
@@ -121,15 +116,14 @@ public class QueryImpl implements SimpleQuery {
             String refObjectField = fieldSplit[1];
             field = fieldSplit[2];
 // System.out.println("field=" + field);
-            Method getterForReference = ai.getGetter(refObjectField);
-            Class refType = getterForReference.getReturnType();
+            Class refType = ai.getPersistentProperty(refObjectField).getPropertyClass();
             AnnotationInfo refAi = em.getAnnotationManager().getAnnotationInfo(refType);
-            Method getterForField = refAi.getGetter(field);
+            PersistentProperty getterForField = refAi.getPersistentProperty(field);
 // System.out.println("getter=" + getterForField);
             String paramValue = getParamValueAsStringForAmazonQuery(param, getterForField);
             logger.finest("paramValue=" + paramValue);
-            Method refIdMethod = refAi.getIdMethod();
-            if (NamingHelper.attributeName(refIdMethod).equals(field)) {
+            String idFieldName = refAi.getIdMethod().getFieldName();
+            if (idFieldName.equals(field)) {
                 logger.finer("Querying using id field, no second query required.");
                 appendFilter(sb, NamingHelper.foreignKey(refObjectField), comparator, paramValue);
             } else {
@@ -160,11 +154,11 @@ public class QueryImpl implements SimpleQuery {
         }
         logger.finest("field=" + field);
 // System.out.println("field=" + field + " paramValue=" + param);
-        Method getterForField = ai.getGetter(field);
+        PersistentProperty getterForField = ai.getPersistentProperty(field);
         if (getterForField == null) {
             throw new PersistenceException("No getter for field: " + field);
         }
-        String columnName = NamingHelper.getColumnName(getterForField);
+        String columnName = getterForField.getColumnName();
         if (columnName == null) {
             columnName = field;
         }
@@ -352,7 +346,7 @@ public class QueryImpl implements SimpleQuery {
         return parameters;
     }
 
-    private String getParamValueAsStringForAmazonQuery(String param, Method getter) {
+    private String getParamValueAsStringForAmazonQuery(String param, PersistentProperty property) {
         String paramName = paramName(param);
         if (paramName == null) {
             // no colon, so just a value
@@ -362,11 +356,11 @@ public class QueryImpl implements SimpleQuery {
         if (paramOb == null) {
             throw new PersistenceException("parameter is null for: " + paramName);
         }
-        if (getter.getAnnotation(ManyToOne.class) != null) {
+        if (property.isForeignKeyRelationship()) {
             String id2 = em.getId(paramOb);
             param = EscapeUtils.escapeQueryParam(id2);
         } else {
-            Class retType = getter.getReturnType();
+            Class retType = property.getPropertyClass();
             if (Integer.class.isAssignableFrom(retType)) {
                 Integer x = (Integer) paramOb;
                 param = AmazonSimpleDBUtil.encodeRealNumberRange(new BigDecimal(x), AmazonSimpleDBUtil.LONG_DIGITS, EntityManagerSimpleJPA.OFFSET_VALUE)

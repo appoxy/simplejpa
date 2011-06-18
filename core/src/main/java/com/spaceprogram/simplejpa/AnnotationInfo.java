@@ -3,7 +3,7 @@ package com.spaceprogram.simplejpa;
 import com.spaceprogram.simplejpa.AnnotationManager.ClassMethodEntry;
 
 import java.lang.annotation.Annotation;
-import java.lang.reflect.Method;
+import java.lang.reflect.*;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -17,8 +17,8 @@ import java.util.List;
 public class AnnotationInfo {
 
     private Annotation[] classAnnotations;
-    private Method idMethod;
-    private Map<String, Method> getterMap = new HashMap();
+    private PersistentProperty idMethod;
+    private Map<String, PersistentProperty> persistentProperties = new HashMap();
     private String discriminatorValue;
     private String domainName;
     private Class rootClass;
@@ -29,8 +29,8 @@ public class AnnotationInfo {
         this.classAnnotations = classAnnotations;
     }
 
-    public void setIdMethod(Method idMethod) {
-        this.idMethod = idMethod;
+    public void setIdProperty(PersistentProperty property) {
+        this.idMethod = property;
     }
 
     public void setDomainName(String domainName) {
@@ -41,7 +41,7 @@ public class AnnotationInfo {
         return classAnnotations;
     }
 
-    public Method getIdMethod() {
+    public PersistentProperty getIdMethod() {
         return idMethod;
     }
 
@@ -50,17 +50,30 @@ public class AnnotationInfo {
 		return domainName;
 	}
 
-    public void addGetter(Method method) {
-        getterMap.put(method.getName(), method);
+    public PersistentProperty addGetter(Method method) {
+        PersistentMethod persistentMethod = new PersistentMethod(method);
+        // if we already have an accessor in the list, don't overwrite it
+        if (persistentProperties.containsKey(persistentMethod.getFieldName())) return persistentProperties.get(persistentMethod.getFieldName());
+        persistentProperties.put(persistentMethod.getFieldName(), persistentMethod);
+        if (persistentMethod.isId()) setIdProperty(persistentMethod);
+        return persistentMethod;
     }
 
-    public Collection<Method> getGetters() {
-        return getterMap.values();
+    public PersistentProperty addField(Field field) {
+        PersistentField persistentField = new PersistentField(field);
+        // if we already have an accessor in the list, don't overwrite it
+        if (persistentProperties.containsKey(persistentField.getFieldName())) return persistentProperties.get(persistentField.getFieldName());
+        persistentProperties.put(persistentField.getFieldName(), persistentField);
+        if (persistentField.isId()) setIdProperty(persistentField);
+        return persistentField;
     }
 
-    public Method getGetter(String field) {
-        String getterName = NamingHelper.getterName(field);
-        return getterMap.get(getterName);
+    public Collection<PersistentProperty> getPersistentProperties() {
+        return persistentProperties.values();
+    }
+
+    public PersistentProperty getPersistentProperty(String field) {
+        return persistentProperties.get(field);
     }
 
     public void setDiscriminatorValue(String discriminatorValue) {

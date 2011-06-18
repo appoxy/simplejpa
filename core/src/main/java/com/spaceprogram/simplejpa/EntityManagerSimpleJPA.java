@@ -119,10 +119,6 @@ public class EntityManagerSimpleJPA implements SimpleEntityManager, DatabaseMana
         return t;
     }
 
-    public String s3ObjectId(String id, Method getter) {
-        return id + "-" + NamingHelper.attributeName(getter);
-    }
-
     public static String padOrConvertIfRequired(Object ob) {
         if (ob instanceof Integer || ob instanceof Long) {
             // then pad
@@ -157,14 +153,7 @@ public class EntityManagerSimpleJPA implements SimpleEntityManager, DatabaseMana
         if (ai == null)
             return null; // todo: should it throw?
         String id = null;
-        try {
-            id = (String) ai.getIdMethod().invoke(o);
-        } catch (IllegalAccessException e) {
-            throw new PersistenceException(e);
-        } catch (InvocationTargetException e) {
-            throw new PersistenceException(e);
-        }
-        return id;
+        return (String) ai.getIdMethod().getProperty(o);
     }
 
     public String getDomainName(Class<? extends Object> aClass) {
@@ -441,11 +430,11 @@ public class EntityManagerSimpleJPA implements SimpleEntityManager, DatabaseMana
      * @param getter
      * @param val
      */
-    public <T> void setFieldValue(Class tClass, T newInstance, Method getter, String val) {
+    public <T> void setFieldValue(Class tClass, T newInstance, PersistentProperty property, String val) {
         try {
             // need param type
-            String attName = NamingHelper.attributeName(getter);
-            Class retType = getter.getReturnType();
+            String attName = property.getFieldName();
+            Class retType = property.getPropertyClass();
 // logger.fine("getter in setFieldValue = " + attName + " - valAsString=" + valAsString + " rettype=" + retType);
             Method setMethod = tClass.getMethod("set" + StringUtils.capitalize(attName), retType);
             Object newField = null;
@@ -491,7 +480,7 @@ public class EntityManagerSimpleJPA implements SimpleEntityManager, DatabaseMana
             }
             setMethod.invoke(newInstance, newField);
         } catch (Exception e) {
-            throw new PersistenceException("Failed setting field of getter: " + getter.getName() + ", using value: " + val, e);
+            throw new PersistenceException("Failed setting field of getter: " + property.getFieldName() + ", using value: " + val, e);
         }
     }
 

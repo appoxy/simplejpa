@@ -165,8 +165,8 @@ public class AnnotationManager {
             ai.setRootClass(c);
         }
         putTableDeclaration(ai, c);
-        putMethods(ai, c);
         putProperties(ai, c);
+        putMethods(ai, c);
         if (ai.getIdMethod() == null) {
             throw new PersistenceException("No ID method specified for: " + c.getName());
         }
@@ -185,8 +185,6 @@ public class AnnotationManager {
 //            System.out.println("method=" + methodName);
             if (config.isGroovyBeans() && (methodName.equals("getProperty") || methodName.equals("getMetaClass")))
                 continue;
-            Id id = method.getAnnotation(Id.class);
-            if (id != null) ai.setIdMethod(method);
             Transient transientM = method.getAnnotation(Transient.class);
             if (transientM != null) continue; // we don't save this one
             ai.addGetter(method);
@@ -196,26 +194,21 @@ public class AnnotationManager {
 
     /**
      * For field based annotations.
+     * TODO add OneToOne and ManyToOne support
      *
      * @param ai
      * @param c
      */
     private void putProperties(AnnotationInfo ai, Class c) {
         for (Field field : c.getDeclaredFields()) {
-            Id id = field.getAnnotation(Id.class);
-            if (id != null) {
-                try {
-                    BeanInfo info = Introspector.getBeanInfo(c);
-                    for (PropertyDescriptor descriptor : info.getPropertyDescriptors()) {
-                        if (descriptor.getName().equals(field.getName())) {
-                            ai.setIdMethod(descriptor.getReadMethod());
-                            break;
-                        }
-                    }
-                } catch (IntrospectionException e) {
-                    throw new RuntimeException(e);
-                }
-            }
+            parseProperty(ai, c, field);
+        }
+    }
+
+    private void parseProperty(AnnotationInfo ai, Class c, Field field) {
+        // TODO add support for OneToOne and ManyToMany
+        if (!field.isAnnotationPresent(Transient.class) && (field.isAnnotationPresent(OneToMany.class) || field.isAnnotationPresent(ManyToOne.class) || field.isAnnotationPresent(Id.class))) {
+            ai.addField(field);
         }
     }
 
