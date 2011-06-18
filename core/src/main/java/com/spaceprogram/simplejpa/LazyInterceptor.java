@@ -33,6 +33,7 @@ public class LazyInterceptor implements MethodInterceptor, Serializable {
     private transient EntityManagerSimpleJPA em;
     /** Just for reference */
     private Map<String, String> foreignKeys;
+
     /** So we know which fields to delete */
     private Map<String, Object> nulledFields = new HashMap<String, Object>();
     private boolean dirty;
@@ -66,7 +67,7 @@ public class LazyInterceptor implements MethodInterceptor, Serializable {
                 // FIXME support direct field accessors better here
                 PersistentMethod persistentMethod = (PersistentMethod)(PersistentMethod)em.getFactory().getAnnotationManager().getAnnotationInfo(obj).getPersistentProperty(attributeName);
                 Method getter = persistentMethod.getGetter();
-                MethodProxy getterProxy = MethodProxy.find(obj.getClass(), new Signature(persistentMethod.getSetter().getName(), Type.getType(getter.getReturnType()), new Type[]{}));
+                MethodProxy getterProxy = MethodProxy.find(obj.getClass(), new Signature(persistentMethod.getGetter().getName(), Type.getType(getter.getReturnType()), new Type[]{}));
                 Object ret = getterProxy.invokeSuper(obj, null);
                 if (ret != null) {
                     nulledFields.put(attributeName, ret);
@@ -77,7 +78,10 @@ public class LazyInterceptor implements MethodInterceptor, Serializable {
     }
 
     private boolean handleGetMethod(Object obj, Method method) throws NoSuchMethodException, IllegalAccessException, InvocationTargetException, AmazonClientException, IOException, ClassNotFoundException {
-        if (method.getAnnotation(ManyToOne.class) != null) {
+        // TODO user persistentproperty methods here instead
+        PersistentProperty property = em.getAnnotationManager().getAnnotationInfo(obj.getClass()).getPersistentProperty(NamingHelper.attributeName(method));
+
+        if (property.isForeignKeyRelationship()) {
             logger.fine("intercepting many to one");
             if (foreignKeys != null) {
                 String foreignKey = foreignKeys.get(NamingHelper.attributeName(method));
@@ -96,7 +100,7 @@ public class LazyInterceptor implements MethodInterceptor, Serializable {
                 Method setter = obj.getClass().getMethod(setterName, retType);
                 setter.invoke(obj, toSet);
             }
-        } else if (method.getAnnotation(Lob.class) != null) {
+        } else if (property.isLob()) {
             if (foreignKeys != null) {
                 String lobKey = foreignKeys.get(NamingHelper.attributeName(method));
                 if (lobKey == null) {

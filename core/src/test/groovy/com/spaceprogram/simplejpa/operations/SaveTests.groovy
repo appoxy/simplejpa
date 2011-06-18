@@ -6,6 +6,7 @@ import javax.persistence.Entity
 import javax.persistence.Enumerated
 import javax.persistence.EnumType
 import com.spaceprogram.simplejpa.PersistentField
+import javax.persistence.Id
 
 /**
  * User: kerrywright
@@ -40,6 +41,9 @@ public enum SaveTestEnum {
 
 @Entity
 class SaveTestObject {
+    @Id
+    String id
+
     @Enumerated
     SaveTestEnum defaultEnum
 

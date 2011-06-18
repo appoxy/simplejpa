@@ -106,7 +106,6 @@ class PersistentPropertyTests {
     }
 }
 
-@Entity
 class OverAnnotatedClass {
     @Id
     @Column(name="override")

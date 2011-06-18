@@ -156,7 +156,7 @@ public class Save implements Callable {
                 logger.finer("setting lobkeyattribute=" + columnName + " - " + s3ObjectId);
                 attsToPut.add(new ReplaceableAttribute(columnName, s3ObjectId, true));
             } else if (field.getEnumType() != null) {
-                String toSet = getEnumValue(field, ob);
+                String toSet = getEnumValue(field, o);
                 attsToPut.add(new ReplaceableAttribute(columnName, toSet, true));
             }
             else if(field.isId())
