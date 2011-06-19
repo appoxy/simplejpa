@@ -61,7 +61,8 @@ public abstract class PersistentProperty {
     }
 
     public boolean isForeignKeyRelationship() {
-        return element.isAnnotationPresent(ManyToOne.class);
+        // TODO add support for non "mapped" OneToMany (ie: unidirectional one-to-many as multivalued attribute)
+        return element.isAnnotationPresent(ManyToOne.class) || element.isAnnotationPresent(ManyToMany.class);
     }
 
     public boolean isInverseRelationship() {

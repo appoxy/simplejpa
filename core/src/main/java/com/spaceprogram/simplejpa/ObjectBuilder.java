@@ -54,15 +54,15 @@ public class ObjectBuilder {
                 String columnName = field.getColumnName();
                 if (field.isForeignKeyRelationship()) {
                     // lazy it up
-                    String identifierForManyToOne = getIdForManyToOne(em, field, columnName, atts);
-                    logger.finest("identifierForManyToOne=" + identifierForManyToOne);
-                    if (identifierForManyToOne == null) {
+                    Set<String> keys = getForeignKeys(em, field, columnName, atts);
+                    logger.finest("keys=" + keys);
+                    if (keys == null || keys.isEmpty()) {
                         continue;
                     }
                     // todo: stick a cache in here and check the cache for the instance before creating the lazy loader.
                     logger.finest("creating new lazy loading instance for field " + field.getFieldName() + " of class " + tClass.getSimpleName() + " with id " + id);
-//                    Object toSet = newLazyLoadingInstance(retType, identifierForManyToOne);
-                    owi.getInterceptor().putForeignKey(attName, identifierForManyToOne);
+//                    Object toSet = newLazyLoadingInstance(retType, keys);
+                    owi.getInterceptor().putForeignKey(attName, keys);
                 } else if (field.isInverseRelationship()) {
                     Class typeInList = field.getPropertyClass();
                     // todo: should this return null if there are no elements??
@@ -83,7 +83,8 @@ public class ObjectBuilder {
                     String lobKeyAttributeName = field.getColumnName();
                     String lobKeyVal = getValueToSet(atts, lobKeyAttributeName, columnName);
                     logger.finest("lobkeyval to set on interceptor=" + lobKeyVal + " - fromatt=" + lobKeyAttributeName);
-                    if (lobKeyVal != null) owi.getInterceptor().putForeignKey(attName, lobKeyVal);
+                    // TODO add multivalue support for LOB keys
+                    if (lobKeyVal != null) owi.getInterceptor().putForeignKey(attName, Collections.singleton(lobKeyVal));
                 } else if (field.getEnumType() != null) {
                     String val = getValueToSet(atts, attName, columnName);
                     if(val != null){
@@ -131,14 +132,15 @@ public class ObjectBuilder {
         return cwi;
     }
 
-    private static String getIdForManyToOne(EntityManagerSimpleJPA em, PersistentProperty getter, String columnName, List<Attribute> atts) {
+    private static Set<String> getForeignKeys(EntityManagerSimpleJPA em, PersistentProperty getter, String columnName, List<Attribute> atts) {
         String fkAttName = columnName != null ? columnName : NamingHelper.foreignKey(getter.getFieldName());
+        HashSet<String> keys = new HashSet<String>(atts.size());
         for (Attribute att : atts) {
             if (att.getName().equals(fkAttName)) {
-                return att.getValue();
+                keys.add(att.getValue());
             }
         }
-        return null;
+        return keys;
     }
 
     private static Collection<String> getValuesToSet(List<Attribute> atts, String propertyName, String columnName) {

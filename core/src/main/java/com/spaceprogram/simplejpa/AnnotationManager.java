@@ -207,8 +207,8 @@ public class AnnotationManager {
     }
 
     private void parseProperty(AnnotationInfo ai, Class c, Field field) {
-        // TODO add support for OneToOne and ManyToMany
-        if (!field.isAnnotationPresent(Transient.class) && (field.isAnnotationPresent(OneToMany.class) || field.isAnnotationPresent(ManyToOne.class) || field.isAnnotationPresent(Id.class))) {
+        // TODO add support for OneToOne
+        if (!field.isAnnotationPresent(Transient.class) && (field.isAnnotationPresent(ManyToMany.class) || field.isAnnotationPresent(OneToMany.class) || field.isAnnotationPresent(ManyToOne.class) || field.isAnnotationPresent(Id.class))) {
             ai.addField(field);
         }
     }

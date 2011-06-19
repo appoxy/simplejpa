@@ -857,5 +857,32 @@ public class PersistenceTests extends BaseTestClass {
         em.close();
     }
 
+    @Test
+    public void testPersistManyToMany() {
+        EntityManager em = factory.createEntityManager();
 
+        ManyToManyTestObject1 objectOneOne = new ManyToManyTestObject1();
+        ManyToManyTestObject1 objectOneTwo = new ManyToManyTestObject1();
+        ManyToManyTestObject2 objectTwoOne = new ManyToManyTestObject2();
+        ManyToManyTestObject2 objectTwoTwo = new ManyToManyTestObject2();
+
+        em.persist(objectOneOne);
+        em.persist(objectOneTwo);
+        em.persist(objectTwoOne);
+        em.persist(objectTwoTwo);
+
+        objectOneOne.setOtherObjects(Arrays.asList(objectTwoOne, objectTwoTwo));
+        objectOneTwo.setOtherObjects(Arrays.asList(objectTwoOne, objectTwoTwo));
+        objectTwoOne.setOtherObjects(Arrays.asList(objectOneOne, objectOneTwo));
+        objectTwoTwo.setOtherObjects(Arrays.asList(objectOneOne, objectOneTwo));
+
+        em.persist(objectOneOne);
+        em.persist(objectOneTwo);
+        em.persist(objectTwoOne);
+        em.persist(objectTwoTwo);
+
+        objectOneOne = em.find(ManyToManyTestObject1.class, objectOneOne.getId());
+        Assert.assertEquals(2, objectOneOne.getOtherObjects().size());
+        Assert.assertEquals(2, objectOneOne.getOtherObjects().iterator().next().getOtherObjects().size());
+    }
 }

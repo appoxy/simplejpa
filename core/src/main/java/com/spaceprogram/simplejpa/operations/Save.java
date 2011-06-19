@@ -127,8 +127,15 @@ public class Save implements Callable {
             }
             if (field.isForeignKeyRelationship()) {
                 // store the id of this object
-                String id2 = em.getId(ob);
-                attsToPut.add(new ReplaceableAttribute(columnName, id2, true));
+                if (Collection.class.isAssignableFrom(field.getRawClass())) {
+                    for(Object each : (Collection)ob) {
+                        String id2 = em.getId(each);
+                        attsToPut.add(new ReplaceableAttribute(columnName, id2, true));
+                    }
+                } else {
+                    String id2 = em.getId(ob);
+                    attsToPut.add(new ReplaceableAttribute(columnName, id2, true));
+                }
             } else if (field.isInverseRelationship()) {
                 // FORCING BI-DIRECTIONAL RIGHT NOW SO JUST IGNORE
             } else if (field.isLob()) {
