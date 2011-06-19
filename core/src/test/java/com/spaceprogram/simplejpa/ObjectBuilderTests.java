@@ -15,6 +15,11 @@ public class ObjectBuilderTests extends UnitilsJUnit4{
     Mock<AnnotationInfo> refInfo;
 
     @Test
+    public void testBuildMutiValuedAttribute() {
+
+    }
+
+    @Test
     public void testGetOrdinalEnumValue() throws NoSuchMethodException {
         PersistentMethod method = new PersistentMethod(MyTestObject.class.getDeclaredMethod("getMyEnumOrdinal"));
         assertEquals(MyEnum.me, ObjectBuilder.getEnumValue(method, "0"));

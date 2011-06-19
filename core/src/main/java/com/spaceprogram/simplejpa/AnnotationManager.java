@@ -140,6 +140,7 @@ public class AnnotationManager {
             Entity entity = (Entity) superClass.getAnnotation(Entity.class);
             Inheritance inheritance = (Inheritance) superClass.getAnnotation(Inheritance.class);
             if (mappedSuperclass != null || entity != null) {
+                putProperties(ai, superClass);
                 putMethods(ai, superClass);
                 if (entity != null) {
                     rootClass = superClass;

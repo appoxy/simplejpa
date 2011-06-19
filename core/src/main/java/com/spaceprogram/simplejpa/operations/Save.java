@@ -27,9 +27,7 @@ import java.io.InputStream;
 import java.io.ObjectOutputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.Callable;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -71,7 +69,7 @@ public class Save implements Callable {
             id = UUID.randomUUID().toString();
 //            System.out.println("new object, setting id");
             AnnotationInfo ai = em.getFactory().getAnnotationManager().getAnnotationInfo(o);
-            em.setFieldValue(o.getClass(), o, ai.getIdMethod(), id);
+            em.setFieldValue(o.getClass(), o, ai.getIdMethod(), Collections.singleton(id));
         }
         em.cachePut(id, o);
         return id;
@@ -162,6 +160,13 @@ public class Save implements Callable {
             else if(field.isId())
             {
             	continue;
+            }
+            else if(Collection.class.isInstance(ob)) {
+                for(Object each : ((Collection)ob)) {
+                    String toSet = each != null ? em.padOrConvertIfRequired(each) : "";
+                    // todo: throw an exception if this is going to exceed maximum size, suggest using @Lob
+                    attsToPut.add(new ReplaceableAttribute(columnName, toSet, true));
+                }
             }
             else {
                 String toSet = ob != null ? em.padOrConvertIfRequired(ob) : "";

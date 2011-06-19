@@ -1,5 +1,6 @@
 package com.spaceprogram.simplejpa;
 
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang.time.DateUtils;
 import org.junit.Assert;
 import org.junit.Test;
@@ -11,11 +12,7 @@ import javax.persistence.PersistenceException;
 import javax.persistence.Query;
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.util.Calendar;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.Date;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
@@ -49,6 +46,7 @@ public class PersistenceTests extends BaseTestClass {
         object.setAge(100);
         Date now = new Date();
         object.setBirthday(now);
+        object.setMultiValueProperty(Arrays.asList("me", "myself", "i"));
         em.persist(object);
         String id = object.getId();
 
@@ -66,6 +64,7 @@ public class PersistenceTests extends BaseTestClass {
         Assert.assertEquals(myObject2.getName(), object.getMyTestObject2().getName());
         Assert.assertEquals(new Integer(100), object.getAge());
         Assert.assertEquals(now, object.getBirthday());
+        Assert.assertTrue(CollectionUtils.isEqualCollection(Arrays.asList("me", "myself", "i"), object.getMultiValueProperty()));
 
         // now delete object
         em.remove(object);
@@ -91,6 +90,7 @@ public class PersistenceTests extends BaseTestClass {
         object.setName("Scooby doo");
         object.setAge(100);
         object.setSomeDouble(new Double("123.456"));
+        object.setMultiValueProperty(Arrays.asList("me", "myself", "i"));
         em.persist(object);
         String id = object.getId();
 
@@ -101,6 +101,7 @@ public class PersistenceTests extends BaseTestClass {
 
         // now delete an attribute with the non-enhanced class
         object.setSomeDouble(null);
+        object.setMultiValueProperty(Arrays.asList("not", "myself", "today"));
         object = em.merge(object);
         Assert.assertEquals(10, em.getLastOpStats().getAttsDeleted());
 
@@ -118,6 +119,7 @@ public class PersistenceTests extends BaseTestClass {
         System.out.println("object22= " + object.getMyTestObject2());
         Assert.assertEquals(myObject2.getName(), object.getMyTestObject2().getName());
         Assert.assertEquals(new Integer(100), object.getAge());
+        Assert.assertTrue(CollectionUtils.isEqualCollection(Arrays.asList("not", "myself", "today"), object.getMultiValueProperty()));
 
         object.setIncome(null);
         object = em.merge(object); // should not delete attributes because income was always null

@@ -6,7 +6,7 @@ import net.sf.cglib.proxy.Enhancer;
 
 import javax.persistence.EnumType;
 import javax.persistence.PersistenceException;
-import java.util.List;
+import java.util.*;
 import java.util.logging.Logger;
 
 /**
@@ -95,8 +95,8 @@ public class ObjectBuilder {
                     field.setProperty(newInstance, id);
                 }
                 else {
-                    String val = getValueToSet(atts, attName, columnName);
-                    if (val != null) {
+                    Collection<String> val = getValuesToSet(atts, attName, columnName);
+                    if (val != null && !val.isEmpty()) {
                         em.setFieldValue(tClass, newInstance, field, val);
                     }
                 }
@@ -139,6 +139,18 @@ public class ObjectBuilder {
             }
         }
         return null;
+    }
+
+    private static Collection<String> getValuesToSet(List<Attribute> atts, String propertyName, String columnName) {
+        Collection<String> values = new ArrayList<String>();
+        if(columnName != null) propertyName = columnName;
+        for (Attribute att : atts) {
+            String attName = att.getName();
+            if (attName.equals(propertyName)) {
+                values.add(att.getValue());
+            }
+        }
+        return values;
     }
 
     private static String getValueToSet(List<Attribute> atts, String propertyName, String columnName) {
