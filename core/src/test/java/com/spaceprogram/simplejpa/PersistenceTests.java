@@ -767,6 +767,22 @@ public class PersistenceTests extends BaseTestClass {
         em.close();
     }
 
+    @Test
+    public void testSimpleDBQuery() {
+        EntityManager em = factory.createEntityManager();
+        String name = UUID.randomUUID().toString();
+        MyTestObject o = new MyTestObject(name);
+        em.persist(o);
+        em.close();
+
+        em = factory.createEntityManager();
+        Query q = em.createNativeQuery("select * from MyTestObject where name = :name");
+        q.setParameter("name", name);
+        MyTestObject o1 = (MyTestObject)q.getSingleResult();
+        Assert.assertEquals(name, o1.getName());
+        Assert.assertNotNull(o1.getId());
+        em.close();
+    }
 
     @Test(expected = PersistenceException.class)
     public void testEndsWithQuery() {

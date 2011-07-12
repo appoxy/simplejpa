@@ -16,11 +16,7 @@ import java.util.concurrent.Future;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import javax.persistence.EntityTransaction;
-import javax.persistence.FlushModeType;
-import javax.persistence.LockModeType;
-import javax.persistence.PersistenceException;
-import javax.persistence.Query;
+import javax.persistence.*;
 
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.services.s3.AmazonS3;
@@ -40,6 +36,7 @@ import com.spaceprogram.simplejpa.operations.Delete;
 import com.spaceprogram.simplejpa.operations.Find;
 import com.spaceprogram.simplejpa.operations.Save;
 import com.spaceprogram.simplejpa.query.QueryImpl;
+import com.spaceprogram.simplejpa.query.SimpleDBQuery;
 import com.spaceprogram.simplejpa.stats.OpStats;
 import com.spaceprogram.simplejpa.util.AmazonSimpleDBUtil;
 import com.spaceprogram.simplejpa.util.ConcurrentRetriever;
@@ -496,11 +493,11 @@ public class EntityManagerSimpleJPA implements SimpleEntityManager, DatabaseMana
     }
 
     public Query createNativeQuery(String s) {
-        throw new NotImplementedException("TODO");
+        return new SimpleDBQuery(this, s);
     }
 
     public Query createNativeQuery(String s, Class aClass) {
-        throw new NotImplementedException("TODO");
+        return new SimpleDBQuery(this, s, aClass);
     }
 
     public Query createNativeQuery(String s, String s1) {
