@@ -4,15 +4,9 @@ import com.amazonaws.AmazonClientException;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.simpledb.model.Attribute;
 import com.amazonaws.services.simpledb.model.DeleteAttributesRequest;
-import com.amazonaws.services.simpledb.model.Item;
 import com.amazonaws.services.simpledb.model.PutAttributesRequest;
 import com.amazonaws.services.simpledb.model.ReplaceableAttribute;
-import com.spaceprogram.simplejpa.AnnotationInfo;
-import com.spaceprogram.simplejpa.DomainHelper;
-import com.spaceprogram.simplejpa.EntityManagerFactoryImpl;
-import com.spaceprogram.simplejpa.EntityManagerSimpleJPA;
-import com.spaceprogram.simplejpa.LazyInterceptor;
-import com.spaceprogram.simplejpa.NamingHelper;
+import com.spaceprogram.simplejpa.*;
 import net.sf.cglib.proxy.Factory;
 
 import javax.persistence.EnumType;
@@ -33,10 +27,7 @@ import java.io.InputStream;
 import java.io.ObjectOutputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.Callable;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -78,7 +69,7 @@ public class Save implements Callable {
             id = UUID.randomUUID().toString();
 //            System.out.println("new object, setting id");
             AnnotationInfo ai = em.getFactory().getAnnotationManager().getAnnotationInfo(o);
-            em.setFieldValue(o.getClass(), o, ai.getIdMethod(), id);
+            em.setFieldValue(o.getClass(), o, ai.getIdMethod(), Collections.singleton(id));
         }
         em.cachePut(id, o);
         return id;
@@ -126,30 +117,28 @@ public class Save implements Callable {
             interceptor = (LazyInterceptor) factory.getCallback(0);
         }
 
-        Collection<Method> getters = ai.getGetters();
-        for (Method getter : getters) {
-        	Object ob;
-        	try
-        	{
-        		ob = getter.invoke(o);
-        	}
-        	catch (Exception e)
-        	{
-        		throw new PersistenceException("Failed invoking getter: " + getter, e);
-        	}
+        for (PersistentProperty field : ai.getPersistentProperties()) {
+        	Object ob = field.getProperty(o);
         	
-            String columnName = NamingHelper.getColumnName(getter);
+            String columnName = field.getColumnName();
             if (ob == null) {
                 attsToDelete.add(new Attribute(columnName, null));
                 continue;
             }
-            if (getter.getAnnotation(ManyToOne.class) != null) {
+            if (field.isForeignKeyRelationship()) {
                 // store the id of this object
-                String id2 = em.getId(ob);
-                attsToPut.add(new ReplaceableAttribute(columnName, id2, true));
-            } else if (getter.getAnnotation(OneToMany.class) != null) {
+                if (Collection.class.isAssignableFrom(field.getRawClass())) {
+                    for(Object each : (Collection)ob) {
+                        String id2 = em.getId(each);
+                        attsToPut.add(new ReplaceableAttribute(columnName, id2, true));
+                    }
+                } else {
+                    String id2 = em.getId(ob);
+                    attsToPut.add(new ReplaceableAttribute(columnName, id2, true));
+                }
+            } else if (field.isInverseRelationship()) {
                 // FORCING BI-DIRECTIONAL RIGHT NOW SO JUST IGNORE
-            } else if (getter.getAnnotation(Lob.class) != null) {
+            } else if (field.isLob()) {
                 // store in s3
                 AmazonS3 s3 = null;
                 // todo: need to make sure we only store to S3 if it's changed, too slow.
@@ -157,7 +146,7 @@ public class Save implements Callable {
                 long start3 = System.currentTimeMillis();
                 s3 = em.getS3Service();
                 String bucketName = em.getS3BucketName(); 
-                String s3ObjectId = em.s3ObjectId(id, getter);
+                String s3ObjectId = id +"-"+ field.getFieldName();
 
                 ByteArrayOutputStream bos = new ByteArrayOutputStream();
                 ObjectOutputStream out = new ObjectOutputStream(bos);
@@ -171,32 +160,20 @@ public class Save implements Callable {
                 em.statsS3Put(System.currentTimeMillis() - start3);
                 logger.finer("setting lobkeyattribute=" + columnName + " - " + s3ObjectId);
                 attsToPut.add(new ReplaceableAttribute(columnName, s3ObjectId, true));
-            } else if (getter.getAnnotation(Enumerated.class) != null) {
-                Enumerated enumerated = getter.getAnnotation(Enumerated.class);
-                Class retType = getter.getReturnType();
-                EnumType enumType = enumerated.value();
-                String toSet = null;
-                if (enumType == EnumType.STRING) {
-                    toSet = ob.toString();
-                } else { // ordinal
-                    Object[] enumConstants = retType.getEnumConstants();
-                    for (int i = 0; i < enumConstants.length; i++) {
-                        Object enumConstant = enumConstants[i];
-                        if (enumConstant.toString().equals(ob.toString())) {
-                            toSet = Integer.toString(i);
-                            break;
-                        }
-                    }
-                }
-                if (toSet == null) {
-                    // should never happen
-                    throw new PersistenceException("Enum value is null, couldn't find ordinal match: " + ob);
-                }
+            } else if (field.getEnumType() != null) {
+                String toSet = getEnumValue(field, o);
                 attsToPut.add(new ReplaceableAttribute(columnName, toSet, true));
-            } 
-            else if(getter.getAnnotation(Id.class) != null)
+            }
+            else if(field.isId())
             {
             	continue;
+            }
+            else if(Collection.class.isInstance(ob)) {
+                for(Object each : ((Collection)ob)) {
+                    String toSet = each != null ? em.padOrConvertIfRequired(each) : "";
+                    // todo: throw an exception if this is going to exceed maximum size, suggest using @Lob
+                    attsToPut.add(new ReplaceableAttribute(columnName, toSet, true));
+                }
             }
             else {
                 String toSet = ob != null ? em.padOrConvertIfRequired(ob) : "";
@@ -228,8 +205,7 @@ public class Save implements Callable {
             if (interceptor.getNulledFields() != null && interceptor.getNulledFields().size() > 0) {
                 List<Attribute> attsToDelete2 = new ArrayList<Attribute>();
                 for (String s : interceptor.getNulledFields().keySet()) {
-                    Method getter = ai.getGetter(s);
-                    String columnName = NamingHelper.getColumnName(getter);
+                    String columnName = ai.getPersistentProperty(s).getColumnName();
                     attsToDelete2.add(new Attribute(columnName, null));
                 }
                 start2 = System.currentTimeMillis();
@@ -268,6 +244,30 @@ public class Save implements Callable {
         }
         em.invokeEntityListener(o, newObject ? PostPersist.class : PostUpdate.class);
         if(logger.isLoggable(Level.FINE)) logger.fine("persistOnly time=" + (System.currentTimeMillis() - start));
+    }
+
+    static String getEnumValue(PersistentProperty field, Object ob) {
+        EnumType enumType = field.getEnumType();
+        Class retType = field.getPropertyClass();
+        Object propertyValue = field.getProperty(ob);
+        String toSet = null;
+        if (enumType == EnumType.STRING) {
+            toSet = propertyValue.toString();
+        } else { // ordinal
+            Object[] enumConstants = retType.getEnumConstants();
+            for (int i = 0; i < enumConstants.length; i++) {
+                Object enumConstant = enumConstants[i];
+                if (enumConstant.equals(propertyValue)) {
+                    toSet = Integer.toString(i);
+                    break;
+                }
+            }
+        }
+        if (toSet == null) {
+            // should never happen
+            throw new PersistenceException("Enum value is null, couldn't find ordinal match: " + ob);
+        }
+        return toSet;
     }
 
 

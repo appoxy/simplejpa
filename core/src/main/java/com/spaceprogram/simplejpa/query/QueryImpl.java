@@ -10,6 +10,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -27,12 +28,7 @@ import com.amazonaws.services.simpledb.model.Attribute;
 import com.amazonaws.services.simpledb.model.Item;
 import com.amazonaws.services.simpledb.model.NoSuchDomainException;
 import com.amazonaws.services.simpledb.model.SelectResult;
-import com.spaceprogram.simplejpa.AnnotationInfo;
-import com.spaceprogram.simplejpa.DomainHelper;
-import com.spaceprogram.simplejpa.EntityManagerFactoryImpl;
-import com.spaceprogram.simplejpa.EntityManagerSimpleJPA;
-import com.spaceprogram.simplejpa.LazyList;
-import com.spaceprogram.simplejpa.NamingHelper;
+import com.spaceprogram.simplejpa.*;
 import com.spaceprogram.simplejpa.util.AmazonSimpleDBUtil;
 import com.spaceprogram.simplejpa.util.EscapeUtils;
 
@@ -43,8 +39,7 @@ import org.apache.commons.lang.NotImplementedException;
  * Comparison operators : =, >, >=, <, <=, <> (not equal), [NOT] BETWEEN, [NOT] LIKE, [NOT] IN, IS [NOT] NULL, IS [NOT] EMPTY, [NOT] MEMBER [OF] - Logical operators: NOT AND OR
  * <p/> see: http://docs.solarmetric.com/full/html/ejb3_langref.html#ejb3_langref_where <p/> User: treeder Date: Feb 8, 2008 Time: 7:33:20 PM
  */
-public class QueryImpl implements SimpleQuery {
-    public static final int MAX_RESULTS_PER_REQUEST = 2500;
+public class QueryImpl extends AbstractQuery {
 
     private static Logger logger = Logger.getLogger(QueryImpl.class.getName());
 
@@ -71,28 +66,23 @@ public class QueryImpl implements SimpleQuery {
         return split;
     }
 
-    private EntityManagerSimpleJPA em;
     private JPAQuery q;
 
-    private Map<String, Object> parameters = new HashMap<String, Object>();
     public static String conditionRegex = "(<>)|(>=)|(<=)|=|>|<|\\band\\b|\\bor\\b|\\bis\\b|\\blike\\b";
-    private int maxResults = -1;
     private String qString;
-    private Class tClass;
-    private boolean consistentRead = true;
 
     // private AmazonQueryString amazonQuery;
     private Map<String, List<String>> foreignIds = new HashMap();
 
     public QueryImpl(EntityManagerSimpleJPA em, JPAQuery q) {
-        this.em = em;
+        super(em);
         this.q = q;
         this.qString = q.toString();
         init(em);
     }
 
     public QueryImpl(EntityManagerSimpleJPA em, String qString) {
-        this.em = em;
+        super(em);
         this.qString = qString;
         logger.fine("query=" + qString);
         this.q = new JPAQuery();
@@ -121,15 +111,14 @@ public class QueryImpl implements SimpleQuery {
             String refObjectField = fieldSplit[1];
             field = fieldSplit[2];
 // System.out.println("field=" + field);
-            Method getterForReference = ai.getGetter(refObjectField);
-            Class refType = getterForReference.getReturnType();
+            Class refType = ai.getPersistentProperty(refObjectField).getPropertyClass();
             AnnotationInfo refAi = em.getAnnotationManager().getAnnotationInfo(refType);
-            Method getterForField = refAi.getGetter(field);
+            PersistentProperty getterForField = refAi.getPersistentProperty(field);
 // System.out.println("getter=" + getterForField);
             String paramValue = getParamValueAsStringForAmazonQuery(param, getterForField);
             logger.finest("paramValue=" + paramValue);
-            Method refIdMethod = refAi.getIdMethod();
-            if (NamingHelper.attributeName(refIdMethod).equals(field)) {
+            String idFieldName = refAi.getIdMethod().getFieldName();
+            if (idFieldName.equals(field)) {
                 logger.finer("Querying using id field, no second query required.");
                 appendFilter(sb, NamingHelper.foreignKey(refObjectField), comparator, paramValue);
             } else {
@@ -160,11 +149,11 @@ public class QueryImpl implements SimpleQuery {
         }
         logger.finest("field=" + field);
 // System.out.println("field=" + field + " paramValue=" + param);
-        Method getterForField = ai.getGetter(field);
+        PersistentProperty getterForField = ai.getPersistentProperty(field);
         if (getterForField == null) {
             throw new PersistenceException("No getter for field: " + field);
         }
-        String columnName = NamingHelper.getColumnName(getterForField);
+        String columnName = getterForField.getColumnName();
         if (columnName == null) {
             columnName = field;
         }
@@ -253,10 +242,6 @@ public class QueryImpl implements SimpleQuery {
         sb.append(")");
     }
 
-    public AmazonQueryString createAmazonQuery() throws NoResultsException, AmazonClientException {
-        return createAmazonQuery(true);
-    }
-
     public AmazonQueryString createAmazonQuery(boolean appendLimit) throws NoResultsException, AmazonClientException {
         String select = q.getResult();
         boolean count = false;
@@ -336,67 +321,8 @@ public class QueryImpl implements SimpleQuery {
         return new AmazonQueryString(fullQuery.toString(), count);
     }
 
-    public int executeUpdate() {
-        throw new NotImplementedException("TODO");
-    }
-
     public Map<String, List<String>> getForeignIds() {
         return foreignIds;
-    }
-
-    public int getMaxResults() {
-        return maxResults;
-    }
-
-    public Map<String, Object> getParameters() {
-        return parameters;
-    }
-
-    private String getParamValueAsStringForAmazonQuery(String param, Method getter) {
-        String paramName = paramName(param);
-        if (paramName == null) {
-            // no colon, so just a value
-            return param;
-        }
-        Object paramOb = parameters.get(paramName);
-        if (paramOb == null) {
-            throw new PersistenceException("parameter is null for: " + paramName);
-        }
-        if (getter.getAnnotation(ManyToOne.class) != null) {
-            String id2 = em.getId(paramOb);
-            param = EscapeUtils.escapeQueryParam(id2);
-        } else {
-            Class retType = getter.getReturnType();
-            if (Integer.class.isAssignableFrom(retType)) {
-                Integer x = (Integer) paramOb;
-                param = AmazonSimpleDBUtil.encodeRealNumberRange(new BigDecimal(x), AmazonSimpleDBUtil.LONG_DIGITS, EntityManagerSimpleJPA.OFFSET_VALUE)
-                        .toString();
-                logger.finer("encoded int " + x + " to " + param);
-            } else if (Long.class.isAssignableFrom(retType)) {
-                Long x = (Long) paramOb;
-                param = AmazonSimpleDBUtil.encodeRealNumberRange(new BigDecimal(x), AmazonSimpleDBUtil.LONG_DIGITS, EntityManagerSimpleJPA.OFFSET_VALUE)
-                        .toString();
-            } else if (Double.class.isAssignableFrom(retType)) {
-                Double x = (Double) paramOb;
-                if (!x.isInfinite() && !x.isNaN()) {
-                    param = AmazonSimpleDBUtil.encodeRealNumberRange(new BigDecimal(x), AmazonSimpleDBUtil.LONG_DIGITS, AmazonSimpleDBUtil.LONG_DIGITS,
-                            EntityManagerSimpleJPA.OFFSET_VALUE).toString();
-                } else {
-                    param = x.toString();
-                }
-            } else if (BigDecimal.class.isAssignableFrom(retType)) {
-                BigDecimal x = (BigDecimal) paramOb;
-                param = AmazonSimpleDBUtil.encodeRealNumberRange(x, AmazonSimpleDBUtil.LONG_DIGITS, AmazonSimpleDBUtil.LONG_DIGITS,
-                        EntityManagerSimpleJPA.OFFSET_VALUE).toString();
-            } else if (Date.class.isAssignableFrom(retType)) {
-                Date x = (Date) paramOb;
-                param = AmazonSimpleDBUtil.encodeDate(x);
-            } else { // string
-                param = EscapeUtils.escapeQueryParam(paramOb.toString());
-                //amazon now supports like queries starting with %
-            }
-        }
-        return "'" + param + "'";
     }
 
     public JPAQuery getQ() {
@@ -405,91 +331,6 @@ public class QueryImpl implements SimpleQuery {
 
     public String getQString() {
         return qString;
-    }
-
-    public List getResultList() {
-
-        // convert to amazon query
-        AmazonQueryString amazonQuery;
-        try {
-            amazonQuery = createAmazonQuery();
-        } catch (RuntimeException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-
-        if (amazonQuery == null) {
-            return new ArrayList();
-        }
-
-        try {
-
-// String qToSend = amazonQuery != null ? amazonQuery.toString() : null;
-            em.incrementQueryCount();
-            if (amazonQuery.isCount()) {
-// String domainName = em.getDomainName(tClass);
-                String nextToken = null;
-                SelectResult qr;
-                long count = 0;
-
-                while ((qr = DomainHelper.selectItems(this.em.getSimpleDb(), amazonQuery.getValue(), nextToken)) != null) {
-                    Map<String, List<Attribute>> itemMap = new HashMap<String, List<Attribute>>();
-                    for (Item item : qr.getItems()) {
-                        itemMap.put(item.getName(), item.getAttributes());
-                    }
-
-                    for (String id : itemMap.keySet()) {
-                        List<Attribute> list = itemMap.get(id);
-                        for (Attribute itemAttribute : list) {
-                            if (itemAttribute.getName().equals("Count")) {
-                                count += Long.parseLong(itemAttribute.getValue());
-                            }
-                        }
-                    }
-                    nextToken = qr.getNextToken();
-                    if (nextToken == null) {
-                        break;
-                    }
-                }
-                return Arrays.asList(count);
-            } else {
-                LazyList ret = new LazyList(em, tClass, this);
-                return ret;
-            }
-        } catch (NoSuchDomainException e) {
-            return new ArrayList(); // no need to throw here
-        } catch (Exception e) {
-            throw new PersistenceException(e);
-        }
-    }
-
-    public Object getSingleResult() {
-        List<?> resultList = getResultList();
-        if (resultList instanceof LazyList<?>) {
-            ((LazyList<?>) resultList).setMaxResultsPerToken(2);
-        }
-        Iterator<?> itr = resultList.iterator();
-        if (!itr.hasNext()) {
-            throw new NoResultException();
-        }
-        Object obj = itr.next();
-        if (itr.hasNext()) {
-            throw new NonUniqueResultException();
-        }
-        return obj;
-    }
-
-    public Object getSingleResultNoThrow() {
-        List<?> resultList = getResultList();
-        if (resultList instanceof LazyList<?>) {
-            ((LazyList<?>) resultList).setMaxResultsPerToken(1);
-        }
-        Iterator<?> itr = resultList.iterator();
-        if (itr.hasNext()) {
-            return itr.next();
-        }
-        return null;
     }
 
     private void init(EntityManagerSimpleJPA em) {
@@ -507,78 +348,39 @@ public class QueryImpl implements SimpleQuery {
         consistentRead = em.isConsistentRead();
     }
 
-    public boolean isConsistentRead() {
-        return consistentRead;
-    }
-
-    private String paramName(String param) {
-        int colon = param.indexOf(":");
-        if (colon == -1) {
-            return null;
-        }
-        String paramName = param.substring(colon + 1);
-        return paramName;
-    }
-
-    public SimpleQuery setConsistentRead(boolean consistentRead) {
-        this.consistentRead = consistentRead;
-        return this;
-    }
-
-    public Query setFirstResult(int i) {
-        throw new NotImplementedException("TODO");
-    }
-
-    public Query setFlushMode(FlushModeType flushModeType) {
-        throw new NotImplementedException("TODO");
-    }
-
     public void setForeignIds(Map<String, List<String>> foreignIds) {
         this.foreignIds = foreignIds;
     }
 
-    public Query setHint(String s, Object o) {
-        throw new NotImplementedException("TODO");
-    }
+    public int getCount() {
+        try {
+            if (logger.isLoggable(Level.FINER))
+                logger.finer("Getting size.");
+            JPAQuery queryClone = (JPAQuery) getQ().clone();
+            queryClone.setResult("count(*)");
+            QueryImpl query2 = new QueryImpl(em, queryClone);
+            query2.setParameters(getParameters());
+            query2.setForeignIds(getForeignIds());
+            List results = query2.getResultList();
+            int resultCount = ((Long) results.get(0)).intValue();
+            if (logger.isLoggable(Level.FINER))
+                logger.finer("Got:" + resultCount);
 
-    public Query setMaxResults(int maxResults) {
-        this.maxResults = maxResults;
-        return this;
-    }
-
-    public Query setParameter(int i, Calendar calendar, TemporalType temporalType) {
-        throw new NotImplementedException("TODO");
-    }
-
-    public Query setParameter(int i, Date date, TemporalType temporalType) {
-        throw new NotImplementedException("TODO");
-    }
-
-    public Query setParameter(int i, Object o) {
-        throw new NotImplementedException("TODO");
-    }
-
-    public Query setParameter(String s, Calendar calendar, TemporalType temporalType) {
-        throw new NotImplementedException("TODO");
-    }
-
-    public Query setParameter(String s, Date date, TemporalType temporalType) {
-        throw new NotImplementedException("TODO");
-    }
-
-    public Query setParameter(String s, Object o) {
-        parameters.put(s, o);
-        return this;
+            if (maxResults >= 0 && resultCount > maxResults) {
+                if (logger.isLoggable(Level.FINER))
+                    logger.finer("Too much, adjusting to maxResults: " + maxResults);
+                return maxResults;
+            } else {
+                return resultCount;
+            }
+        } catch (CloneNotSupportedException e) {
+            throw new PersistenceException(e);
+        }
     }
 
     /*
      * public AmazonQueryString getAmazonQuery() { return amazonQuery; } public void setAmazonQuery(AmazonQueryString amazonQuery) { this.amazonQuery = amazonQuery; }
      */
-
-    public void setParameters(Map<String, Object> parameters) {
-        this.parameters = parameters;
-    }
-
     public void setQ(JPAQuery q) {
         this.q = q;
     }

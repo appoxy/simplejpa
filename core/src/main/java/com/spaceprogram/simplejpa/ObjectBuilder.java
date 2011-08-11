@@ -5,18 +5,8 @@ import com.spaceprogram.simplejpa.query.QueryImpl;
 import net.sf.cglib.proxy.Enhancer;
 
 import javax.persistence.EnumType;
-import javax.persistence.Enumerated;
-import javax.persistence.Id;
-import javax.persistence.Lob;
-import javax.persistence.ManyToOne;
-import javax.persistence.OneToMany;
-import javax.persistence.OrderBy;
 import javax.persistence.PersistenceException;
-import java.lang.reflect.Method;
-import java.lang.reflect.ParameterizedType;
-import java.lang.reflect.Type;
-import java.util.Collection;
-import java.util.List;
+import java.util.*;
 import java.util.logging.Logger;
 
 /**
@@ -59,79 +49,56 @@ public class ObjectBuilder {
             }
             ObjectWithInterceptor owi = newEnancedInstance(em, tClass);
             newInstance = (T) owi.getBean();
-            Collection<Method> getters = ai.getGetters();
-            for (Method getter : getters) {
-                String attName = NamingHelper.attributeName(getter);
-                String columnName = NamingHelper.getColumnName(getter);
-                if (getter.getAnnotation(ManyToOne.class) != null) {
+            for (PersistentProperty field : ai.getPersistentProperties()) {
+                String attName = field.getFieldName();
+                String columnName = field.getColumnName();
+                if (field.isForeignKeyRelationship()) {
                     // lazy it up
-                    String identifierForManyToOne = getIdForManyToOne(em, getter, columnName, atts);
-                    logger.finest("identifierForManyToOne=" + identifierForManyToOne);
-                    if (identifierForManyToOne == null) {
+                    Set<String> keys = getForeignKeys(em, field, columnName, atts);
+                    logger.finest("keys=" + keys);
+                    if (keys == null || keys.isEmpty()) {
                         continue;
                     }
                     // todo: stick a cache in here and check the cache for the instance before creating the lazy loader.
-                    logger.finest("creating new lazy loading instance for getter " + getter.getName() + " of class " + tClass.getSimpleName() + " with id " + id);
-//                    Object toSet = newLazyLoadingInstance(retType, identifierForManyToOne);
-                    owi.getInterceptor().putForeignKey(attName, identifierForManyToOne);
-                } else if (getter.getAnnotation(OneToMany.class) != null) {
-                    OneToMany annotation = getter.getAnnotation(OneToMany.class);
-                    ParameterizedType type = (ParameterizedType) getter.getGenericReturnType();
-//                    logger.fine("type for manytoone=" + type + " " + type.getClass().getName()  + " " + type.getRawType() + " " + type.getOwnerType());
-                    Type[] types = type.getActualTypeArguments();
-                    Class typeInList = (Class) types[0];
+                    logger.finest("creating new lazy loading instance for field " + field.getFieldName() + " of class " + tClass.getSimpleName() + " with id " + id);
+//                    Object toSet = newLazyLoadingInstance(retType, keys);
+                    owi.getInterceptor().putForeignKey(attName, keys);
+                } else if (field.isInverseRelationship()) {
+                    Class typeInList = field.getPropertyClass();
                     // todo: should this return null if there are no elements??
 //                    LazyList lazyList = new LazyList(this, newInstance, annotation.mappedBy(), id, typeInList, factory.getAnnotationManager().getAnnotationInfo(typeInList));
-                    
-                    OrderBy orderBy = null;
-                    if (type.getRawType() == List.class)
+
+                    List<PersistentProperty.OrderClause> orderBy = null;
+                    if (List.class.isAssignableFrom(field.getRawClass()))
                     {
-                        orderBy = getter.getAnnotation(OrderBy.class);
+                        orderBy = field.getOrderClauses();
                     }
                     
-                    LazyList lazyList = new LazyList(em, typeInList, oneToManyQuery(em, attName, annotation.mappedBy(), id, typeInList, orderBy));
-                    Class retType = getter.getReturnType();
+                    LazyList lazyList = new LazyList(em, typeInList, oneToManyQuery(em, attName, field.getMappedBy(), id, typeInList, orderBy));
+//                    Class retType = field.getReturnType();
                     // todo: assuming List for now, handle other collection types
-                    String setterName = em.getSetterNameFromGetter(getter);
-                    Method setter = tClass.getMethod(setterName, retType);
-                    setter.invoke(newInstance, lazyList);
-                } else if (getter.getAnnotation(Lob.class) != null) {
+                    field.setProperty(newInstance, lazyList);
+                } else if (field.isLob()) {
                     // handled in Proxy
-                    String lobKeyAttributeName = NamingHelper.lobKeyAttributeName(getter);
+                    String lobKeyAttributeName = field.getColumnName();
                     String lobKeyVal = getValueToSet(atts, lobKeyAttributeName, columnName);
                     logger.finest("lobkeyval to set on interceptor=" + lobKeyVal + " - fromatt=" + lobKeyAttributeName);
-                    if (lobKeyVal != null) owi.getInterceptor().putForeignKey(attName, lobKeyVal);
-                } else if (getter.getAnnotation(Enumerated.class) != null) {
-                    Enumerated enumerated = getter.getAnnotation(Enumerated.class);
-                    Class retType = getter.getReturnType();
-                    EnumType enumType = enumerated.value();
+                    // TODO add multivalue support for LOB keys
+                    if (lobKeyVal != null) owi.getInterceptor().putForeignKey(attName, Collections.singleton(lobKeyVal));
+                } else if (field.getEnumType() != null) {
                     String val = getValueToSet(atts, attName, columnName);
                     if(val != null){
-                        Object enumVal = null;
-                        if (enumType == EnumType.STRING) {
-                            Object[] enumConstants = retType.getEnumConstants();
-                            for (Object enumConstant : enumConstants) {
-                                if (enumConstant.toString().equals(val)) {
-                                    enumVal = enumConstant;
-                                }
-                            }
-                        } else { // ordinal
-                            enumVal = retType.getEnumConstants()[Integer.parseInt(val)];
-                        }
-                        Method setMethod = em.getSetterFromGetter(tClass, getter, retType);
-                        setMethod.invoke(newInstance, enumVal);
+                        Object enumVal = getEnumValue(field, val);
+                        field.setProperty(newInstance, enumVal);
                     }
                 }
-                else if(getter.getAnnotation(Id.class) != null) {
-                	Class retType = getter.getReturnType();
-                	String setterName = em.getSetterNameFromGetter(getter);
-                    Method setter = tClass.getMethod(setterName, retType);
-                    setter.invoke(newInstance, id);
+                else if(field.isId()) {
+                    field.setProperty(newInstance, id);
                 }
                 else {
-                    String val = getValueToSet(atts, attName, columnName);
-                    if (val != null) {
-                        em.setFieldValue(tClass, newInstance, getter, val);
+                    Collection<String> val = getValuesToSet(atts, attName, columnName);
+                    if (val != null && !val.isEmpty()) {
+                        em.setFieldValue(tClass, newInstance, field, val);
                     }
                 }
             }
@@ -141,6 +108,18 @@ public class ObjectBuilder {
         em.cachePut(id, newInstance);
         return newInstance;
 
+    }
+
+    static Object getEnumValue(PersistentProperty field, String val) {
+        EnumType enumType = field.getEnumType();
+        Class<? extends Enum> retType = (Class<? extends Enum>)field.getPropertyClass();
+        Object enumVal = null;
+        if (enumType == EnumType.STRING) {
+            enumVal = Enum.valueOf(retType, val);
+        } else { // ordinal
+            enumVal = retType.getEnumConstants()[Integer.parseInt(val)];
+        }
+        return enumVal;
     }
 
     private static ObjectWithInterceptor newEnancedInstance(EntityManagerSimpleJPA em, Class tClass) {
@@ -153,14 +132,27 @@ public class ObjectBuilder {
         return cwi;
     }
 
-    private static String getIdForManyToOne(EntityManagerSimpleJPA em, Method getter, String columnName, List<Attribute> atts) {
-        String fkAttName = columnName != null ? columnName : NamingHelper.foreignKey(getter);
+    private static Set<String> getForeignKeys(EntityManagerSimpleJPA em, PersistentProperty getter, String columnName, List<Attribute> atts) {
+        String fkAttName = columnName != null ? columnName : NamingHelper.foreignKey(getter.getFieldName());
+        HashSet<String> keys = new HashSet<String>(atts.size());
         for (Attribute att : atts) {
             if (att.getName().equals(fkAttName)) {
-                return att.getValue();
+                keys.add(att.getValue());
             }
         }
-        return null;
+        return keys;
+    }
+
+    private static Collection<String> getValuesToSet(List<Attribute> atts, String propertyName, String columnName) {
+        Collection<String> values = new ArrayList<String>();
+        if(columnName != null) propertyName = columnName;
+        for (Attribute att : atts) {
+            String attName = att.getName();
+            if (attName.equals(propertyName)) {
+                values.add(att.getValue());
+            }
+        }
+        return values;
     }
 
     private static String getValueToSet(List<Attribute> atts, String propertyName, String columnName) {
@@ -176,27 +168,33 @@ public class ObjectBuilder {
     }
 
 
-    private static QueryImpl oneToManyQuery(EntityManagerSimpleJPA em, String attName, String foreignKeyFieldName, Object id, Class typeInList, OrderBy orderBy) {
+    private static QueryImpl oneToManyQuery(EntityManagerSimpleJPA em, String attName, String foreignKeyFieldName, Object id, Class typeInList, List<PersistentProperty.OrderClause> orderBy) {
         if (foreignKeyFieldName == null || foreignKeyFieldName.length() == 0) {
             // use the class containing the OneToMany
             foreignKeyFieldName = attName;
         }
         AnnotationInfo ai = em.getFactory().getAnnotationManager().getAnnotationInfo(typeInList);
-        // System.out.println("root class= " + ai.getRootClass());
-        Method getterForReference = ai.getGetter(foreignKeyFieldName);
-        Class refType = getterForReference.getReturnType();
+        Class refType = ai.getPersistentProperty(foreignKeyFieldName).getPropertyClass();
         AnnotationInfo refAi = em.getAnnotationManager().getAnnotationInfo(refType);
-        String foreignIdAttr = NamingHelper.attributeName(refAi.getIdMethod());
-        String query = "select * from " + ai.getMainClass().getSimpleName() + " o where o." + foreignKeyFieldName + "." + foreignIdAttr + " = '" + id + "'";
-        
-        if (orderBy != null)
-        {
-        	query += " and o." + orderBy.value().split("\\s")[0] + " is not null";
-        	query += " order by o." + orderBy.value();
-        }
+        String query = createOneToManyQuery(typeInList, foreignKeyFieldName, refAi, id, orderBy);
         
         logger.finer("OneToMany query=" + query);
         return new QueryImpl(em, query);
+    }
+
+    static String createOneToManyQuery(Class typeInList, String foreignKeyFieldName, AnnotationInfo refAi, Object id, List<PersistentProperty.OrderClause> orderBy) {
+        String foreignIdAttr = refAi.getIdMethod().getFieldName();
+        String query = "select o from " + typeInList.getName() + " o where o." + foreignKeyFieldName + "." + foreignIdAttr + " = '" + id + "'";
+
+        if (orderBy != null) {
+            for(PersistentProperty.OrderClause clause : orderBy)
+            {
+                query += " and o." + clause.field + " is not null";
+                query += " order by o." + clause.field;
+                if (clause.order != null) query += " " + clause.order.toString();
+            }
+        }
+        return query;
     }
 
 

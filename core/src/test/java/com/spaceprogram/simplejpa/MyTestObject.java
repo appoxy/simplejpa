@@ -4,10 +4,7 @@ import org.apache.commons.lang.builder.ToStringBuilder;
 
 import javax.persistence.*;
 import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 /**
  * User: treeder
@@ -28,7 +25,7 @@ public class MyTestObject extends MySuperClass {
     private List<MyTestObject2> myList;
     private String bigString;
     private MyTestObject3 myTestObject3;
-    private Set<String> multiValueProperty;
+    private Collection<String> multiValueProperty;
     private MyEnum myEnumOrdinal;
     private MyEnum myEnumString;
 
@@ -157,14 +154,11 @@ public class MyTestObject extends MySuperClass {
         return myTestObject3;
     }
 
-    // todo: try to get this working
-    @MultiValueProperty
-    @Transient
-    public Set<String> getMultiValueProperty() {
+    public Collection<String> getMultiValueProperty() {
         return multiValueProperty;
     }
 
-    public void setMultiValueProperty(Set<String> multiValueProperty) {
+    public void setMultiValueProperty(Collection<String> multiValueProperty) {
         this.multiValueProperty = multiValueProperty;
     }
 

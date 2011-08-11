@@ -14,8 +14,7 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -32,7 +31,8 @@ public class LazyInterceptor implements MethodInterceptor, Serializable {
     /** Used to lazy load */
     private transient EntityManagerSimpleJPA em;
     /** Just for reference */
-    private Map<String, String> foreignKeys;
+    private Map<String, Set<String>> foreignKeys;
+
     /** So we know which fields to delete */
     private Map<String, Object> nulledFields = new HashMap<String, Object>();
     private boolean dirty;
@@ -63,47 +63,62 @@ public class LazyInterceptor implements MethodInterceptor, Serializable {
         if (args != null && args.length == 1) {
             Object valueToSet = args[0];
             if (valueToSet == null) {
-                Method getter = em.getFactory().getAnnotationManager().getAnnotationInfo(obj).getGetter(attributeName);
-                MethodProxy getterProxy = MethodProxy.find(obj.getClass(), new Signature(NamingHelper.getGetterNameFromSetter(method), Type.getType(getter.getReturnType()), new Type[]{}));
+                // FIXME support direct field accessors better here
+                PersistentMethod persistentMethod = (PersistentMethod)(PersistentMethod)em.getFactory().getAnnotationManager().getAnnotationInfo(obj).getPersistentProperty(attributeName);
+                Method getter = persistentMethod.getGetter();
+                MethodProxy getterProxy = MethodProxy.find(obj.getClass(), new Signature(persistentMethod.getGetter().getName(), Type.getType(getter.getReturnType()), new Type[]{}));
                 Object ret = getterProxy.invokeSuper(obj, null);
                 if (ret != null) {
                     nulledFields.put(attributeName, ret);
-                    System.out.println("field " + attributeName + " is being nulled. Old value = " + ret);
+                    logger.fine("field " + attributeName + " is being nulled. Old value = " + ret);
                 }
             }
         }
     }
 
     private boolean handleGetMethod(Object obj, Method method) throws NoSuchMethodException, IllegalAccessException, InvocationTargetException, AmazonClientException, IOException, ClassNotFoundException {
-        if (method.getAnnotation(ManyToOne.class) != null) {
+        // TODO user persistentproperty methods here instead
+        PersistentProperty property = em.getAnnotationManager().getAnnotationInfo(obj.getClass()).getPersistentProperty(NamingHelper.attributeName(method));
+
+        if (property.isForeignKeyRelationship()) {
             logger.fine("intercepting many to one");
             if (foreignKeys != null) {
-                String foreignKey = foreignKeys.get(NamingHelper.attributeName(method));
-                logger.finer("ManyToOne key=" + foreignKey);
-                if (foreignKey == null) {
+                Set<String> keys = foreignKeys.get(NamingHelper.attributeName(method));
+                logger.finer("Relationship key=" + keys);
+                if (keys == null || keys.isEmpty()) {
                     return true;
                 }
                 checkEntityManager();
-                Class retType = method.getReturnType();
-                logger.fine("loading ManyToOne object for type=" + retType + " with id=" + foreignKey);
-                Object toSet = em.find(retType, foreignKey);
+                Class retType = property.getRawClass();
+                logger.fine("loading Relationship object for type=" + retType + " with id=" + keys);
+                Object toSet;
+                // TODO load in batch
+                if(Collection.class.isAssignableFrom(retType)) {
+                    toSet = new ArrayList(); //TODO support other collection types
+                    for(String key : keys) {
+                        ((Collection)toSet).add(em.find(property.getPropertyClass(), key));
+                    }
+                } else {
+                    toSet = em.find(retType, keys.iterator().next());
+                }
                 if(logger.isLoggable(Level.FINEST)){
-                    logger.finest("got object for ManyToOne=" + toSet);
+                    logger.finest("got object for Relationship=" + toSet);
                 }
                 String setterName = em.getSetterNameFromGetter(method);
                 Method setter = obj.getClass().getMethod(setterName, retType);
                 setter.invoke(obj, toSet);
             }
-        } else if (method.getAnnotation(Lob.class) != null) {
+        } else if (property.isLob()) {
             if (foreignKeys != null) {
-                String lobKey = foreignKeys.get(NamingHelper.attributeName(method));
-                if (lobKey == null) {
+                // TODO add support for multivalued LOB keys
+                Set<String> lobKey = foreignKeys.get(NamingHelper.attributeName(method));
+                if (lobKey == null || lobKey.isEmpty()) {
                     return true;
                 }
                 checkEntityManager();
                 logger.finer("intercepting lob. key==" + lobKey);
                 Class retType = method.getReturnType();
-                Object toSet = em.getObjectFromS3(lobKey);
+                Object toSet = em.getObjectFromS3(lobKey.iterator().next());
                 // System.out.println("toset=" + toSet);
                 String setterName = em.getSetterNameFromGetter(method);
                 Method setter = obj.getClass().getMethod(setterName, retType);
@@ -119,8 +134,8 @@ public class LazyInterceptor implements MethodInterceptor, Serializable {
         }
     }
 
-    public void putForeignKey(String attributeName, String foreignKeyVal) {
-        if (foreignKeys == null) foreignKeys = new HashMap<String, String>();
+    public void putForeignKey(String attributeName, Set<String> foreignKeyVal) {
+        if (foreignKeys == null) foreignKeys = new HashMap<String, Set<String>>();
         foreignKeys.put(attributeName, foreignKeyVal);
     }
 

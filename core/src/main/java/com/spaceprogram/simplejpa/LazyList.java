@@ -15,6 +15,7 @@ import com.amazonaws.services.simpledb.model.SelectResult;
 import com.spaceprogram.simplejpa.query.JPAQuery;
 import com.spaceprogram.simplejpa.query.QueryImpl;
 
+import com.spaceprogram.simplejpa.query.SimpleQuery;
 import org.apache.commons.collections.list.GrowthList;
 
 /**
@@ -26,7 +27,7 @@ public class LazyList<E> extends AbstractList<E> implements Serializable {
 
     private transient EntityManagerSimpleJPA em;
     private Class genericReturnType;
-    private QueryImpl origQuery;
+    private SimpleQuery origQuery;
 
     /**
      * Stores the actual objects for this list
@@ -37,10 +38,10 @@ public class LazyList<E> extends AbstractList<E> implements Serializable {
     private String realQuery;
     private String domainName;
     private int maxResults = -1;
-    private int maxResultsPerToken = QueryImpl.MAX_RESULTS_PER_REQUEST;
+    private int maxResultsPerToken = SimpleQuery.MAX_RESULTS_PER_REQUEST;
     private boolean consistentRead = true;
 
-    public LazyList(EntityManagerSimpleJPA em, Class tClass, QueryImpl query) {
+    public LazyList(EntityManagerSimpleJPA em, Class tClass, SimpleQuery query) {
         this.em = em;
         this.genericReturnType = tClass;
         this.origQuery = query;
@@ -66,37 +67,12 @@ public class LazyList<E> extends AbstractList<E> implements Serializable {
     }
 
     public int size() {
-        if (count > -1)
-            return count;
+        if (count > -1) return count;
 
         if (backingList != null && nextToken == null) {
             count = backingList.size();
-        } else {
-            try {
-                if (logger.isLoggable(Level.FINER))
-                    logger.finer("Getting size.");
-                JPAQuery queryClone = (JPAQuery) origQuery.getQ().clone();
-                queryClone.setResult("count(*)");
-                QueryImpl query2 = new QueryImpl(em, queryClone);
-                query2.setParameters(origQuery.getParameters());
-                query2.setForeignIds(origQuery.getForeignIds());
-                List results = query2.getResultList();
-                int resultCount = ((Long) results.get(0)).intValue();
-                if (logger.isLoggable(Level.FINER))
-                    logger.finer("Got:" + resultCount);
-
-                if (maxResults >= 0 && resultCount > maxResults) {
-                    if (logger.isLoggable(Level.FINER))
-                        logger.finer("Too much, adjusting to maxResults: " + maxResults);
-                    count = maxResults;
-                } else {
-                    count = resultCount;
-                }
-            } catch (CloneNotSupportedException e) {
-                throw new PersistenceException(e);
-            }
         }
-        return count;
+        return origQuery.getCount();
     }
 
     public int getFetchedSize() {

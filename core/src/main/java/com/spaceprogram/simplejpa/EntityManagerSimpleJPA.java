@@ -7,10 +7,8 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
-import java.util.Map;
+import java.text.ParseException;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -18,11 +16,7 @@ import java.util.concurrent.Future;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import javax.persistence.EntityTransaction;
-import javax.persistence.FlushModeType;
-import javax.persistence.LockModeType;
-import javax.persistence.PersistenceException;
-import javax.persistence.Query;
+import javax.persistence.*;
 
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.services.s3.AmazonS3;
@@ -42,6 +36,7 @@ import com.spaceprogram.simplejpa.operations.Delete;
 import com.spaceprogram.simplejpa.operations.Find;
 import com.spaceprogram.simplejpa.operations.Save;
 import com.spaceprogram.simplejpa.query.QueryImpl;
+import com.spaceprogram.simplejpa.query.SimpleDBQuery;
 import com.spaceprogram.simplejpa.stats.OpStats;
 import com.spaceprogram.simplejpa.util.AmazonSimpleDBUtil;
 import com.spaceprogram.simplejpa.util.ConcurrentRetriever;
@@ -119,10 +114,6 @@ public class EntityManagerSimpleJPA implements SimpleEntityManager, DatabaseMana
         return t;
     }
 
-    public String s3ObjectId(String id, Method getter) {
-        return id + "-" + NamingHelper.attributeName(getter);
-    }
-
     public static String padOrConvertIfRequired(Object ob) {
         if (ob instanceof Integer || ob instanceof Long) {
             // then pad
@@ -157,14 +148,7 @@ public class EntityManagerSimpleJPA implements SimpleEntityManager, DatabaseMana
         if (ai == null)
             return null; // todo: should it throw?
         String id = null;
-        try {
-            id = (String) ai.getIdMethod().invoke(o);
-        } catch (IllegalAccessException e) {
-            throw new PersistenceException(e);
-        } catch (InvocationTargetException e) {
-            throw new PersistenceException(e);
-        }
-        return id;
+        return (String) ai.getIdMethod().getProperty(o);
     }
 
     public String getDomainName(Class<? extends Object> aClass) {
@@ -441,57 +425,17 @@ public class EntityManagerSimpleJPA implements SimpleEntityManager, DatabaseMana
      * @param getter
      * @param val
      */
-    public <T> void setFieldValue(Class tClass, T newInstance, Method getter, String val) {
+    public <T> void setFieldValue(Class tClass, T newInstance, PersistentProperty property, Collection<String> vals) {
         try {
             // need param type
-            String attName = NamingHelper.attributeName(getter);
-            Class retType = getter.getReturnType();
+            String attName = property.getFieldName();
+            Class retType = property.getRawClass();
 // logger.fine("getter in setFieldValue = " + attName + " - valAsString=" + valAsString + " rettype=" + retType);
             Method setMethod = tClass.getMethod("set" + StringUtils.capitalize(attName), retType);
-            Object newField = null;
-            if (Integer.class.isAssignableFrom(retType) || retType == int.class) {
-// logger.fine("setting int val " + val + " on field " + attName);
-                val = AmazonSimpleDBUtil.decodeRealNumberRange(val, EntityManagerSimpleJPA.OFFSET_VALUE).toString();
-                if (retType == int.class)
-                    retType = Integer.class;
-            } else if (Long.class.isAssignableFrom(retType) || retType == long.class) {
-                val = AmazonSimpleDBUtil.decodeRealNumberRange(val, EntityManagerSimpleJPA.OFFSET_VALUE).toString();
-                if (retType == long.class)
-                    retType = Long.class;
-            } else if (Float.class.isAssignableFrom(retType) || retType == float.class) {
-                // Ignore NaN and Infinity
-                if (!val.matches(".*Infinity|NaN")) {
-                    val = AmazonSimpleDBUtil.decodeRealNumberRange(val, AmazonSimpleDBUtil.LONG_DIGITS, EntityManagerSimpleJPA.OFFSET_VALUE).toString();
-                }
-                if (retType == float.class)
-                    retType = Float.class;
-            } else if (Double.class.isAssignableFrom(retType) || retType == double.class) {
-                // Ignore NaN and Infinity
-                if (!val.matches(".*Infinity|NaN")) {
-                    val = AmazonSimpleDBUtil.decodeRealNumberRange(val, AmazonSimpleDBUtil.LONG_DIGITS, EntityManagerSimpleJPA.OFFSET_VALUE).toString();
-                }
-                if (retType == double.class)
-                    retType = Double.class;
-            } else if (BigDecimal.class.isAssignableFrom(retType)) {
-                val = AmazonSimpleDBUtil.decodeRealNumberRange(val, AmazonSimpleDBUtil.LONG_DIGITS, EntityManagerSimpleJPA.OFFSET_VALUE).toString();
-            } else if (byte[].class.isAssignableFrom(retType)) {
-                newField = AmazonSimpleDBUtil.decodeByteArray(val);
-            } else if (Date.class.isAssignableFrom(retType)) {
-                newField = AmazonSimpleDBUtil.decodeDate(val);
-            }
-            // If newField has not been created yet then we create it from val.
-            if (newField == null) {
-                // We build a new field object here because we may get an argument mismatch otherwise, eg: BigDecimal for an Integer field.
-                // todo: getConstructor throws a NoSuchMethodException here, should ensure that these are second class object fields
-                Constructor forNewField = retType.getConstructor(val.getClass());
-                if (forNewField == null) {
-                    throw new PersistenceException("No constructor for field type: " + retType + " that can take a " + val.getClass());
-                }
-                newField = forNewField.newInstance(val);
-            }
+            Object newField = convert(vals, property, property.getRawClass());
             setMethod.invoke(newInstance, newField);
         } catch (Exception e) {
-            throw new PersistenceException("Failed setting field of getter: " + getter.getName() + ", using value: " + val, e);
+            throw new PersistenceException("Failed setting field of getter: " + property.getFieldName() + ", using value: " + vals, e);
         }
     }
 
@@ -549,11 +493,11 @@ public class EntityManagerSimpleJPA implements SimpleEntityManager, DatabaseMana
     }
 
     public Query createNativeQuery(String s) {
-        throw new NotImplementedException("TODO");
+        return new SimpleDBQuery(this, s);
     }
 
     public Query createNativeQuery(String s, Class aClass) {
-        throw new NotImplementedException("TODO");
+        return new SimpleDBQuery(this, s, aClass);
     }
 
     public Query createNativeQuery(String s, String s1) {
@@ -739,5 +683,61 @@ public class EntityManagerSimpleJPA implements SimpleEntityManager, DatabaseMana
 
     public boolean isConsistentRead() {
         return consistentRead;
+    }
+
+    @SuppressWarnings("unchecked")
+    public <T> T convert(Collection<String> values, PersistentProperty property, Class retType) throws ParseException, InvocationTargetException, IllegalAccessException, NoSuchMethodException, InstantiationException {
+        Object newField = null;
+        Object val = null;
+        if (Integer.class.isAssignableFrom(retType) || retType == int.class) {
+            val = AmazonSimpleDBUtil.decodeRealNumberRange(values.iterator().next(), EntityManagerSimpleJPA.OFFSET_VALUE).toString();
+            if (retType == int.class)
+                retType = Integer.class;
+        } else if (Long.class.isAssignableFrom(retType) || retType == long.class) {
+            val = AmazonSimpleDBUtil.decodeRealNumberRange(values.iterator().next(), EntityManagerSimpleJPA.OFFSET_VALUE).toString();
+            if (retType == long.class)
+                retType = Long.class;
+        } else if (Float.class.isAssignableFrom(retType) || retType == float.class) {
+            // Ignore NaN and Infinity
+            if (!values.iterator().next().matches(".*Infinity|NaN")) {
+                val = AmazonSimpleDBUtil.decodeRealNumberRange(values.iterator().next(), AmazonSimpleDBUtil.LONG_DIGITS, EntityManagerSimpleJPA.OFFSET_VALUE).toString();
+            }
+            else newField = Float.NaN;
+            if (retType == float.class)
+                retType = Float.class;
+        } else if (Double.class.isAssignableFrom(retType) || retType == double.class) {
+            // Ignore NaN and Infinity
+            if (!values.iterator().next().matches(".*Infinity|NaN")) {
+                val = AmazonSimpleDBUtil.decodeRealNumberRange(values.iterator().next(), AmazonSimpleDBUtil.LONG_DIGITS, EntityManagerSimpleJPA.OFFSET_VALUE).toString();
+            }
+            else newField = Double.NaN;
+            if (retType == double.class)
+                retType = Double.class;
+        } else if (BigDecimal.class.isAssignableFrom(retType)) {
+            val = AmazonSimpleDBUtil.decodeRealNumberRange(values.iterator().next(), AmazonSimpleDBUtil.LONG_DIGITS, EntityManagerSimpleJPA.OFFSET_VALUE).toString();
+        } else if (byte[].class.isAssignableFrom(retType)) {
+            newField = AmazonSimpleDBUtil.decodeByteArray(values.iterator().next());
+        } else if (Date.class.isAssignableFrom(retType)) {
+            newField = AmazonSimpleDBUtil.decodeDate(values.iterator().next());
+        } else if (Collection.class.isAssignableFrom(retType)) { // convert all of the contents of the collection
+            Collection coll = new ArrayList(); //TODO support other collection types
+            for (String value : values) {
+                coll.add(convert(Collections.singleton(value), property, property.getPropertyClass()));
+            }
+            newField = coll;
+        } else {
+            val = values.iterator().next();
+        }
+        // If newField has not been created yet then we create it from val.
+        if (newField == null) {
+            // We build a new field object here because we may get an argument mismatch otherwise, eg: BigDecimal for an Integer field.
+            // todo: getConstructor throws a NoSuchMethodException here, should ensure that these are second class object fields
+            Constructor forNewField = retType.getConstructor(val.getClass());
+            if (forNewField == null) {
+                throw new PersistenceException("No constructor for field type: " + retType + " that can take a " + val.getClass());
+            }
+            newField = forNewField.newInstance(val);
+        }
+        return (T)newField;
     }
 }

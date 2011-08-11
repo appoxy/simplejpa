@@ -45,7 +45,11 @@ public class NamingHelper {
     }
 
     public static String lobKeyAttributeName(Method getter) {
-        return NamingHelper.attributeName(getter) + "-lobkey";
+        return lobKeyAttributeName(NamingHelper.attributeName(getter));
+    }
+
+    public static String lobKeyAttributeName(String attName) {
+        return attName + "-lobkey";
     }
 
     public static String foreignKey(Method getter) {
