@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>SimpleJPA</groupId>
   <artifactId>SimpleJPA</artifactId>
-  <version>1.6-SNAPSHOT</version>
+  <version>1.6-SNAPSHOT-fork-benjchristensen</version>
   <name>SimpleJPA</name>
   <url>http://code.google.com/p/simplejpa</url>
   <scm>
