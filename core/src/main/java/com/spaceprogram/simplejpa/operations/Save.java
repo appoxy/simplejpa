@@ -9,6 +9,7 @@ import com.amazonaws.services.simpledb.model.ReplaceableAttribute;
 import com.spaceprogram.simplejpa.*;
 import net.sf.cglib.proxy.Factory;
 
+import javax.persistence.CascadeType;
 import javax.persistence.EnumType;
 import javax.persistence.Enumerated;
 import javax.persistence.Id;
@@ -135,6 +136,19 @@ public class Save implements Callable {
                 } else {
                     String id2 = em.getId(ob);
                     attsToPut.add(new ReplaceableAttribute(columnName, id2, true));
+                    
+                    /* check if we should persist this */
+                    boolean persistRelationship = false;
+                    ManyToOne a = field.getGetter().getAnnotation(ManyToOne.class);
+                    CascadeType[] cascadeType = a.cascade();
+                    for (CascadeType type : cascadeType) {
+                        if (CascadeType.ALL == type || CascadeType.PERSIST == type) {
+                            persistRelationship = true;
+                        }
+                    }
+                    if (persistRelationship) {
+                        em.persist(ob);
+                    }
                 }
             } else if (field.isInverseRelationship()) {
                 // FORCING BI-DIRECTIONAL RIGHT NOW SO JUST IGNORE
