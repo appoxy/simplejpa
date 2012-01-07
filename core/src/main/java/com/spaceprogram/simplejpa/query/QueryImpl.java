@@ -176,6 +176,11 @@ public class QueryImpl extends AbstractQuery {
 // param = param.startsWith("%") ? param.substring(1) : param;
             appendFilter(sb, columnName, comparator, paramValue);
         } else {
+            /* handle the <> comparator which needs to convert to != for SimpleDB */
+            if(comparator.equals("<>")) {
+                comparator = "!=";
+            }
+            /* continue with appending */
             String paramValue = getParamValueAsStringForAmazonQuery(param, getterForField);
             logger.finer("paramValue=" + paramValue);
             logger.finer("comp=[" + comparator + "]");
