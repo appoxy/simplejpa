@@ -152,6 +152,26 @@ public class Save implements Callable {
                 }
             } else if (field.isInverseRelationship()) {
                 // FORCING BI-DIRECTIONAL RIGHT NOW SO JUST IGNORE
+                // ... except for cascading persistence down to all items in the OneToMany collection
+                /* check if we should persist this */
+                boolean persistRelationship = false;
+                OneToMany a = field.getGetter().getAnnotation(OneToMany.class);
+                CascadeType[] cascadeType = a.cascade();
+                for (CascadeType type : cascadeType) {
+                    if (CascadeType.ALL == type || CascadeType.PERSIST == type) {
+                        persistRelationship = true;
+                    }
+                }
+                if (persistRelationship) {
+                    if (ob instanceof Collection) {
+                        // it's OneToMany, so this should always be the case, shouldn't it?
+                        for (Object _item : (Collection) ob) {
+                            // persist each item in the collection
+                            em.persist(_item);
+                        }
+                    }
+                }
+                
             } else if (field.isLob()) {
                 // store in s3
                 AmazonS3 s3 = null;
