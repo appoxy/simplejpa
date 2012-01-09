@@ -1,19 +1,22 @@
 package com.spaceprogram.simplejpa.operations;
 
-import com.amazonaws.AmazonClientException;
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.simpledb.model.Attribute;
-import com.amazonaws.services.simpledb.model.DeleteAttributesRequest;
-import com.amazonaws.services.simpledb.model.PutAttributesRequest;
-import com.amazonaws.services.simpledb.model.ReplaceableAttribute;
-import com.spaceprogram.simplejpa.*;
-import net.sf.cglib.proxy.Factory;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.ObjectOutputStream;
+import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import javax.persistence.CascadeType;
 import javax.persistence.EnumType;
-import javax.persistence.Enumerated;
-import javax.persistence.Id;
-import javax.persistence.Lob;
 import javax.persistence.ManyToOne;
 import javax.persistence.OneToMany;
 import javax.persistence.PersistenceException;
@@ -21,17 +24,21 @@ import javax.persistence.PostPersist;
 import javax.persistence.PostUpdate;
 import javax.persistence.PrePersist;
 import javax.persistence.PreUpdate;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.ObjectOutputStream;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.util.*;
-import java.util.concurrent.Callable;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+
+import net.sf.cglib.proxy.Factory;
+
+import com.amazonaws.AmazonClientException;
+import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.simpledb.model.Attribute;
+import com.amazonaws.services.simpledb.model.DeleteAttributesRequest;
+import com.amazonaws.services.simpledb.model.PutAttributesRequest;
+import com.amazonaws.services.simpledb.model.ReplaceableAttribute;
+import com.amazonaws.services.simpledb.model.UpdateCondition;
+import com.spaceprogram.simplejpa.AnnotationInfo;
+import com.spaceprogram.simplejpa.EntityManagerFactoryImpl;
+import com.spaceprogram.simplejpa.EntityManagerSimpleJPA;
+import com.spaceprogram.simplejpa.LazyInterceptor;
+import com.spaceprogram.simplejpa.PersistentProperty;
 
 /**
  * User: treeder
@@ -92,6 +99,11 @@ public class Save implements Callable {
         long start = System.currentTimeMillis();
         em.invokeEntityListener(o, newObject ? PrePersist.class : PreUpdate.class);
         AnnotationInfo ai = em.getFactory().getAnnotationManager().getAnnotationInfo(o);
+
+        UpdateCondition expected = null;
+        PersistentProperty versionField = null;
+        Integer nextVersion = -1;
+        
         String domainName;
         if (ai.getRootClass() != null) {
         	domainName = em.getOrCreateDomain(ai.getRootClass());
@@ -150,6 +162,16 @@ public class Save implements Callable {
                         em.persist(ob);
                     }
                 }
+            } else if (field.isVersioned()) {
+                Integer curVersion = Integer.parseInt("" + ob);
+                nextVersion = (1 + curVersion);
+
+                attsToPut.add(new ReplaceableAttribute(columnName, em.padOrConvertIfRequired(nextVersion), true));
+                
+                if (curVersion > 0)
+                    expected = new UpdateCondition(columnName, em.padOrConvertIfRequired(curVersion), true);
+                
+                versionField = field;
             } else if (field.isInverseRelationship()) {
                 // FORCING BI-DIRECTIONAL RIGHT NOW SO JUST IGNORE
                 // ... except for cascading persistence down to all items in the OneToMany collection
@@ -223,10 +245,13 @@ public class Save implements Callable {
             this.em.getSimpleDb().putAttributes(new PutAttributesRequest()
                .withDomainName(domainName)
                .withItemName(id)
-               .withAttributes(attsToPut));
+               .withAttributes(attsToPut).withExpected(expected));
             duration2 = System.currentTimeMillis() - start2;
             if(logger.isLoggable(Level.FINE))logger.fine("putAttributes time=" + (duration2));
             em.statsAttsPut(attsToPut.size(), duration2);
+            
+            if (null != versionField)
+                versionField.setProperty(o, nextVersion);
         }
 
         /*
