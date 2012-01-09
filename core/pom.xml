@@ -2,22 +2,8 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>SimpleJPA</groupId>
   <artifactId>SimpleJPA</artifactId>
-  <version>1.6-SNAPSHOT-fork-benjchristensen</version>
+  <version>1.6-SNAPSHOT-aldrinleal</version>
   <name>SimpleJPA</name>
-  <url>http://code.google.com/p/simplejpa</url>
-  <scm>
-    <connection>scm:svn:http://simplejpa.googlecode.com/svn/trunk</connection>
-    <developerConnection>scm:svn:https://simplejpa.googlecode.com/svn/trunk</developerConnection>
-    <url>http://code.google.com/p/simplejpa/source/browse/trunk</url>
-  </scm>
-  <distributionManagement>
-    <!-- temporary home for snapshots until something better can be found -->
-    <repository>
-      <id>overcomplified</id>
-      <name>Overcomplified 3rd party snapshot repository</name>
-      <url>http://repository.overcomplified.com/content/repositories/thirdpartysnapshots</url>
-    </repository>
-  </distributionManagement>
   <dependencies>
     <dependency>
       <groupId>commons-lang</groupId>
@@ -96,6 +82,7 @@
             </includes>
         </configuration>
       </plugin>
+      <!-- 
       <plugin>
           <groupId>org.codehaus.gmaven</groupId>
           <artifactId>gmaven-plugin</artifactId>
@@ -114,6 +101,7 @@
               </execution>
           </executions>
       </plugin>
+      -->
     </plugins>
   </build>
 </project>
