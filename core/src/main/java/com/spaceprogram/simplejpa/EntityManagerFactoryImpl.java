@@ -5,11 +5,13 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.logging.Level;
@@ -20,6 +22,10 @@ import javax.persistence.EntityManager;
 import javax.persistence.EntityManagerFactory;
 import javax.persistence.PersistenceException;
 import javax.persistence.spi.PersistenceUnitInfo;
+
+import org.apache.commons.collections.MapUtils;
+import org.scannotation.AnnotationDB;
+import org.scannotation.ClasspathUrlFinder;
 
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.ClientConfiguration;
@@ -40,14 +46,11 @@ import com.spaceprogram.simplejpa.cache.NoopCache;
 import com.spaceprogram.simplejpa.cache.NoopCacheFactory;
 import com.spaceprogram.simplejpa.stats.OpStats;
 
-import org.apache.commons.collections.MapUtils;
-import org.scannotation.AnnotationDB;
-import org.scannotation.ClasspathUrlFinder;
-
 /**
  * User: treeder Date: Feb 10, 2008 Time: 6:20:23 PM
  * 
- * Additional Contributions - Eric Molitor eric@molitor.org - Eric Wei e.pwei84@gmail.com
+ * Additional Contributions - Eric Molitor eric@molitor.org - Eric Wei
+ * e.pwei84@gmail.com
  */
 public class EntityManagerFactoryImpl implements EntityManagerFactory {
     private static Logger logger = Logger.getLogger(EntityManagerFactoryImpl.class.getName());
@@ -85,7 +88,9 @@ public class EntityManagerFactoryImpl implements EntityManagerFactory {
      */
     private AnnotationManager annotationManager;
     /**
-     * for all the concurrent action. todo: It might make sense to have two executors, one fast one for queries, and one slow one used for slow things like puts/deletes
+     * for all the concurrent action. todo: It might make sense to have two
+     * executors, one fast one for queries, and one slow one used for slow
+     * things like puts/deletes
      */
     private ExecutorService executor;
     /**
@@ -140,7 +145,8 @@ public class EntityManagerFactoryImpl implements EntityManagerFactory {
     /**
      * This one is generally called via the PersistenceProvider.
      * 
-     * @param persistenceUnitInfo only using persistenceUnitName for now
+     * @param persistenceUnitInfo
+     *            only using persistenceUnitName for now
      * @param props
      */
     public EntityManagerFactoryImpl(PersistenceUnitInfo persistenceUnitInfo, Map props) {
@@ -150,21 +156,27 @@ public class EntityManagerFactoryImpl implements EntityManagerFactory {
     /**
      * Use this if you want to construct this directly.
      * 
-     * @param persistenceUnitName used to prefix the SimpleDB domains
-     * @param props should have accessKey and secretKey
+     * @param persistenceUnitName
+     *            used to prefix the SimpleDB domains
+     * @param props
+     *            should have accessKey and secretKey
      */
     public EntityManagerFactoryImpl(String persistenceUnitName, Map props) {
-        this(persistenceUnitName, props, null);
+        this(persistenceUnitName, props, null, null);
     }
 
     /**
-     * Use this one in web applications, see: http://code.google.com/p/simplejpa/wiki/WebApplications
+     * Use this one in web applications, see:
+     * http://code.google.com/p/simplejpa/wiki/WebApplications
      * 
      * @param persistenceUnitName
      * @param props
-     * @param libsToScan a set of
+     * @param libsToScan
+     *            a set of
+     * @param classNames
      */
-    public EntityManagerFactoryImpl(String persistenceUnitName, Map props, Set<String> libsToScan) {
+    public EntityManagerFactoryImpl(String persistenceUnitName, Map props, Set<String> libsToScan,
+            Set<String> classNames) {
         if (persistenceUnitName == null) {
             throw new IllegalArgumentException("Must have a persistenceUnitName!");
         }
@@ -180,7 +192,7 @@ public class EntityManagerFactoryImpl implements EntityManagerFactory {
             }
         }
 
-        init(libsToScan);
+        init(libsToScan, classNames);
 
         createClients();
     }
@@ -225,16 +237,19 @@ public class EntityManagerFactoryImpl implements EntityManagerFactory {
     }
 
     /**
-     * * SimpleJPA entity manager, which gets classes names instead of "libs-to-scan".
+     * * SimpleJPA entity manager, which gets classes names instead of
+     * "libs-to-scan".
+     * 
      * @author Yair Ben-Meir
      * @param persistenceUnitName
      * @param props
      * @param classNames
      * @throws PersistenceException
      */
-    public static EntityManagerFactoryImpl newInstanceWithClassNames(String persistenceUnitName, Map<String, String> props, Set<String> classNames)
-            throws PersistenceException {
-        return new EntityManagerFactoryImpl(persistenceUnitName, props, getLibsToScan(classNames));
+    public static EntityManagerFactoryImpl newInstanceWithClassNames(String persistenceUnitName,
+            Map<String, String> props, String... classNames) throws PersistenceException {
+        return new EntityManagerFactoryImpl(persistenceUnitName, props, null, new TreeSet<String>(
+                Arrays.asList(classNames)));
     }
 
     private static Set<String> getLibsToScan(Set<String> classNames) throws PersistenceException {
@@ -257,7 +272,7 @@ public class EntityManagerFactoryImpl implements EntityManagerFactory {
         return libs;
     }
 
-    private void init(Set<String> libsToScan) {
+    private void init(Set<String> libsToScan, Set<String> classNames) {
         lobBucketName = (String) props.get("lobBucketName");
         printQueries = Boolean.parseBoolean((String) props.get("printQueries"));
         cacheFactoryClassname = (String) props.get("cacheFactory");
@@ -281,6 +296,19 @@ public class EntityManagerFactoryImpl implements EntityManagerFactory {
         s3Endpoint = MapUtils.getString(props, "s3Endpoint", DEFAULT_S3_ENDPOINT);
         s3Secure = MapUtils.getBoolean(props, "s3Secure", false);
 
+        if (null != libsToScan) {
+            scanClasses(libsToScan);
+        } else {
+            for (String className : classNames)
+                initEntity(className);
+        }
+
+        initSecondLevelCache();
+
+        executor = Executors.newFixedThreadPool(numExecutorThreads);
+    }
+
+    private void scanClasses(Set<String> libsToScan) {
         try {
             logger.info("Scanning for entity classes...");
             URL[] urls;
@@ -294,7 +322,7 @@ public class EntityManagerFactoryImpl implements EntityManagerFactory {
             if (libsToScan != null) {
                 URL[] urls2 = new URL[urls.length + libsToScan.size()];
                 System.arraycopy(urls, 0, urls2, 0, urls.length);
-// urls = new URL[libsToScan.size()];
+                // urls = new URL[libsToScan.size()];
                 int count = 0;
                 for (String s : libsToScan) {
                     logger.fine("libinset=" + s);
@@ -322,10 +350,6 @@ public class EntityManagerFactoryImpl implements EntityManagerFactory {
                 }
             }
             logger.info("Finished scanning for entity classes.");
-
-            initSecondLevelCache();
-
-            executor = Executors.newFixedThreadPool(numExecutorThreads);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -358,7 +382,8 @@ public class EntityManagerFactoryImpl implements EntityManagerFactory {
     }
 
     /**
-     * Call this to load the props from a file in the root of our classpath called: sdb.properties
+     * Call this to load the props from a file in the root of our classpath
+     * called: sdb.properties
      * 
      * @throws IOException
      * @deprecated don't use this.
@@ -523,8 +548,9 @@ public class EntityManagerFactoryImpl implements EntityManagerFactory {
     }
 
     /**
-     * This will turn on sessionless mode which means that you do not need to keep EntityManager's open, nor do you need to close them. But you should ALWAYS use the second level
-     * cache in this case.
+     * This will turn on sessionless mode which means that you do not need to
+     * keep EntityManager's open, nor do you need to close them. But you should
+     * ALWAYS use the second level cache in this case.
      * 
      * @param sessionless
      */
@@ -542,7 +568,8 @@ public class EntityManagerFactoryImpl implements EntityManagerFactory {
     }
 
     /**
-     * Turns off caches. Useful for testing. This will also shutdown and recreate any existing cache if cacheless is true.
+     * Turns off caches. Useful for testing. This will also shutdown and
+     * recreate any existing cache if cacheless is true.
      * 
      * @param cacheless
      */
@@ -550,10 +577,10 @@ public class EntityManagerFactoryImpl implements EntityManagerFactory {
         this.cacheless = cacheless;
         if (cacheless) {
             cache = new NoopCache();
-// cacheFactory.shutdown();
-// cacheFactory = new NoopCacheFactory();
+            // cacheFactory.shutdown();
+            // cacheFactory = new NoopCacheFactory();
         } else {
-// cacheFactory.shutdown();
+            // cacheFactory.shutdown();
             initSecondLevelCache();
         }
     }

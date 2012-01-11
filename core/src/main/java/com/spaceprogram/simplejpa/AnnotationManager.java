@@ -1,13 +1,8 @@
 package com.spaceprogram.simplejpa;
 
-import javax.persistence.*;
-import java.beans.BeanInfo;
-import java.beans.IntrospectionException;
-import java.beans.Introspector;
-import java.beans.PropertyDescriptor;
 import java.lang.annotation.Annotation;
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -15,6 +10,26 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Logger;
+
+import javax.persistence.DiscriminatorValue;
+import javax.persistence.Entity;
+import javax.persistence.EntityListeners;
+import javax.persistence.Id;
+import javax.persistence.Inheritance;
+import javax.persistence.ManyToMany;
+import javax.persistence.ManyToOne;
+import javax.persistence.MappedSuperclass;
+import javax.persistence.OneToMany;
+import javax.persistence.PersistenceException;
+import javax.persistence.PostLoad;
+import javax.persistence.PostPersist;
+import javax.persistence.PostRemove;
+import javax.persistence.PostUpdate;
+import javax.persistence.PrePersist;
+import javax.persistence.PreRemove;
+import javax.persistence.PreUpdate;
+import javax.persistence.Table;
+import javax.persistence.Transient;
 
 /**
  * User: treeder
@@ -35,9 +50,18 @@ public class AnnotationManager {
     }
 
     public AnnotationInfo getAnnotationInfo(Object o) {
-        Class c = o.getClass();
+        Class<?> c = getUnwrappedClass(o.getClass());
         AnnotationInfo ai = getAnnotationInfo(c);
         return ai;
+    }
+
+    private Class<?> getUnwrappedClass(Class<? extends Object> class1) {
+        Class<?> result = class1;
+
+        while (null != result && result.getClass().getSimpleName().contains("$$EnhancerBy"))
+            result = result.getSuperclass();
+
+        return result;
     }
 
     public Map<String, AnnotationInfo> getAnnotationMap() {
