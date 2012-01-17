@@ -1,15 +1,15 @@
 package com.spaceprogram.simplejpa.util;
 
-import com.spaceprogram.simplejpa.EntityManagerFactoryImpl;
+import java.util.Map;
+import java.util.Set;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import javax.persistence.EntityManager;
 import javax.persistence.EntityManagerFactory;
 import javax.persistence.PersistenceException;
 
-import java.util.Map;
-import java.util.Set;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import com.spaceprogram.simplejpa.EntityManagerFactoryImpl;
 
 /**
  * For using the thread local pattern. Good for web apps.
@@ -62,7 +62,7 @@ public class SimpleJPAUtil {
             if(persistenceUnitName == null){
                 throw new PersistenceException("SimpleJPAUtil requires a call to setPersistenceUnitName before using.");
             }
-            entityManagerFactory = new EntityManagerFactoryImpl(persistenceUnitName, getProps(), libsToScan);
+            entityManagerFactory = new EntityManagerFactoryImpl(persistenceUnitName, getProps(), libsToScan, null);
             //           todo: use Persistence class: entityManagerFactory = Persistence.createEntityManagerFactory(persistenceUnitName != null ? persistenceUnitName : DEFAULT_PERSISTENCE_UNIT);
         } catch (Throwable ex) {
             // Log exception!

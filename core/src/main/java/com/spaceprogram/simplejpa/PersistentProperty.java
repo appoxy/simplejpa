@@ -73,6 +73,10 @@ public abstract class PersistentProperty {
         return element.isAnnotationPresent(Id.class);
     }
 
+    public boolean isVersioned() {
+        return element.isAnnotationPresent(Version.class);
+    }
+
     public EnumType getEnumType() {
         if (element.isAnnotationPresent(Enumerated.class)) {
             if (element.getAnnotation(Enumerated.class).value() == EnumType.STRING) return EnumType.STRING;
