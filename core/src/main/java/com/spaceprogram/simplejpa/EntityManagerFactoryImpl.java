@@ -567,7 +567,8 @@ public class EntityManagerFactoryImpl implements EntityManagerFactory {
         if (lobBucketName != null) {
             bucketName = lobBucketName;
         } else {
-            bucketName = getPersistenceUnitName() + "-lobs";
+        	// AWS requires lower case S3 bucket names.
+            bucketName = getPersistenceUnitName().toLowerCase() + "-lobs";
         }
 
         // See if we have checked if the bucket already exists.
