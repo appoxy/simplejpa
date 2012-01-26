@@ -82,6 +82,13 @@ public class AnnotationManager {
         AnnotationInfo ai = getAnnotationMap().get(className);
         return ai;
     }
+    
+    // I could have used the getAnnotationInfo() method but I am not sure how it will evolve.
+    // I found that the meaning was more visible using another method.
+    public AnnotationInfo getAnnotationInfoUsingFullClassName(String fullClassName) {
+        AnnotationInfo ai = getAnnotationMap().get(fullClassName);
+        return ai;
+    }
 
     /**
      * This strips the cglib class name out of the enhanced classes.

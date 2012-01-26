@@ -299,8 +299,12 @@ public class EntityManagerFactoryImpl implements EntityManagerFactory {
         if (null != libsToScan) {
             scanClasses(libsToScan);
         } else {
-            for (String className : classNames)
-                initEntity(className);
+            if (classNames != null) {
+                for (String className : classNames)
+                    initEntity(className);
+            } else {
+                scanClasses(new HashSet<String>());
+            }
         }
 
         initSecondLevelCache();

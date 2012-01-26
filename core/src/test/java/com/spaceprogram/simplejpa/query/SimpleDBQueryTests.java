@@ -28,7 +28,7 @@ public class SimpleDBQueryTests extends UnitilsJUnit4 {
         SimpleDBQuery q = new SimpleDBQuery(mockEM.getMock(), "select count(*) from MyTestObject");
         AmazonQueryString aq = q.createAmazonQuery(false);
         assertTrue(aq.isCount());
-        assertEquals("select count(*) from simplddbquerytests-MyTestObject", aq.getValue());
+        assertEquals("select count(*) from `simplddbquerytests-MyTestObject`", aq.getValue());
     }
 
     @Test
@@ -41,7 +41,7 @@ public class SimpleDBQueryTests extends UnitilsJUnit4 {
         q.setParameter("val1", "value1");
         AmazonQueryString aq = q.createAmazonQuery(false);
         assertTrue(aq.isCount());
-        assertEquals("select count(*) from simplddbquerytests-MyTestObject where col1 = 'value1'", aq.getValue());
+        assertEquals("select count(*) from `simplddbquerytests-MyTestObject` where col1 = 'value1'", aq.getValue());
     }
 
     @Test
@@ -54,7 +54,7 @@ public class SimpleDBQueryTests extends UnitilsJUnit4 {
         q.setParameter("val1", 10);
         AmazonQueryString aq = q.createAmazonQuery(false);
         assertTrue(aq.isCount());
-        assertEquals("select count(*) from simplddbquerytests-MyTestObject where col1 = '09223372036854775818'", aq.getValue());
+        assertEquals("select count(*) from `simplddbquerytests-MyTestObject` where col1 = '09223372036854775818'", aq.getValue());
     }
 
     @Test
@@ -68,7 +68,7 @@ public class SimpleDBQueryTests extends UnitilsJUnit4 {
         q.setParameter("val1", now);
         AmazonQueryString aq = q.createAmazonQuery(false);
         assertTrue(aq.isCount());
-        assertEquals("select count(*) from simplddbquerytests-MyTestObject where col1 = '"+ AmazonSimpleDBUtil.encodeDate(now)+"'", aq.getValue());
+        assertEquals("select count(*) from `simplddbquerytests-MyTestObject` where col1 = '"+ AmazonSimpleDBUtil.encodeDate(now)+"'", aq.getValue());
     }
 
     @Test
@@ -83,7 +83,7 @@ public class SimpleDBQueryTests extends UnitilsJUnit4 {
         q.setParameter("val10", 10);
         AmazonQueryString aq = q.createAmazonQuery(false);
         assertFalse(aq.isCount());
-        String expected = new StringBuilder().append("select * from simplddbquerytests-MyTestObject where col1 = '")
+        String expected = new StringBuilder().append("select * from `simplddbquerytests-MyTestObject` where col1 = '")
                 .append(AmazonSimpleDBUtil.encodeDate(now))
                 .append("' and col10 > '09223372036854775818'").toString();
         assertEquals(expected, aq.getValue());
