@@ -71,7 +71,7 @@ public class Save implements Callable {
         em.checkEntity(o);
         // create id if required
         String id = em.getId(o);
-        if (id == null) {
+        if (id == null || id.isEmpty()) {
             newObject = true;
             id = UUID.randomUUID().toString();
             // System.out.println("new object, setting id");
@@ -87,7 +87,7 @@ public class Save implements Callable {
             persistOnly(o, id);
         } catch (Exception e) {
             e.printStackTrace();
-            System.out.println("CAUGHT AND RETHROWING");
+//            System.out.println("CAUGHT AND RETHROWING");
             throw e;
         }
         return o;

@@ -18,12 +18,12 @@ public class PersistenceProviderImpl implements PersistenceProvider {
     }
 
     public EntityManagerFactory createEntityManagerFactory(String s, Map map) {
-        System.out.println("createEntityManagerFactory");
+//        System.out.println("createEntityManagerFactory");
         return new EntityManagerFactoryImpl(s, map);
     }
 
     public EntityManagerFactory createContainerEntityManagerFactory(PersistenceUnitInfo persistenceUnitInfo, Map map) {
-        System.out.println("createContainerEntityManagerFactory");
+//        System.out.println("createContainerEntityManagerFactory");
         return new EntityManagerFactoryImpl(persistenceUnitInfo, map);
     }
 }
