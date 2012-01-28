@@ -25,7 +25,7 @@ public class PersistentMethod extends PersistentProperty {
         try {
             this.setter = method.getDeclaringClass().getDeclaredMethod(setterName, getter.getReturnType());
         } catch (NoSuchMethodException e) {
-            throw new IllegalStateException("No setter found for method provided: "+getter.getName());
+            throw new IllegalStateException("No setter found for method provided: "+getter.getName()+" in class: "+method.getDeclaringClass().getName());
         }
         this.setter.setAccessible(true);
     }

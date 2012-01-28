@@ -71,7 +71,7 @@ public class Save implements Callable {
         em.checkEntity(o);
         // create id if required
         String id = em.getId(o);
-        if (id == null) {
+        if (id == null || id.isEmpty()) {
             newObject = true;
             id = UUID.randomUUID().toString();
             // System.out.println("new object, setting id");
@@ -87,7 +87,7 @@ public class Save implements Callable {
             persistOnly(o, id);
         } catch (Exception e) {
             e.printStackTrace();
-            System.out.println("CAUGHT AND RETHROWING");
+//            System.out.println("CAUGHT AND RETHROWING");
             throw e;
         }
         return o;
@@ -101,7 +101,7 @@ public class Save implements Callable {
 
         UpdateCondition expected = null;
         PersistentProperty versionField = null;
-        Integer nextVersion = -1;
+        Long nextVersion = -1L;
 
         String domainName;
         if (ai.getRootClass() != null) {
@@ -165,13 +165,16 @@ public class Save implements Callable {
                     }
                 }
             } else if (field.isVersioned()) {
-                Integer curVersion = Integer.parseInt("" + ob);
+                Long curVersion = Long.parseLong("" + ob);
                 nextVersion = (1 + curVersion);
 
                 attsToPut.add(new ReplaceableAttribute(columnName, em.padOrConvertIfRequired(nextVersion), true));
 
-                if (curVersion > 0)
+                if (curVersion > 0) {
                     expected = new UpdateCondition(columnName, em.padOrConvertIfRequired(curVersion), true);
+                } else {
+                    expected = new UpdateCondition().withName(columnName).withExists(false);
+                }
 
                 versionField = field;
             } else if (field.isInverseRelationship()) {

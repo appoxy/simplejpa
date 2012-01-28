@@ -24,7 +24,7 @@ public class Model implements Serializable {
         String entityClass = null;
         for (int i = 0; i < Thread.currentThread().getStackTrace().length; i++) {
             StackTraceElement element = stackTraceElements[i];
-            System.out.println("class=" + element.getClassName());
+//            System.out.println("class=" + element.getClassName());
             if (element.getClassName().endsWith("Model")) {
                 entityClass = stackTraceElements[i+1].getClassName();
                 break;
@@ -32,7 +32,7 @@ public class Model implements Serializable {
         }
 //        StackTraceElement element = Thread.currentThread().getStackTrace()[1];
 //        System.out.println("class=" + " - " + element.getClassName());
-        System.out.println("entityclass=" + entityClass);
+//        System.out.println("entityclass=" + entityClass);
         return query(Class.forName(entityClass));
     }
 

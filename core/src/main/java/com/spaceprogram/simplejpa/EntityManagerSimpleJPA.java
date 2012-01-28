@@ -176,10 +176,14 @@ public class EntityManagerSimpleJPA implements SimpleEntityManager, DatabaseMana
 // throw new PersistenceException("Class not marked as an Entity: " + className);
             fullClassName = className;
         }
-// System.out.println("fullclassName=" + fullClassName);
-        Class tClass = factory.getAnnotationManager().getClass(fullClassName, null);
-        AnnotationInfo ai = factory.getAnnotationManager().getAnnotationInfo(tClass); // sets up metadata if not already done
-        return tClass;
+        //Class tClass = factory.getAnnotationManager().getClass(fullClassName, null);
+        //AnnotationInfo ai = factory.getAnnotationManager().getAnnotationInfo(tClass); // sets up metadata if not already done
+        AnnotationInfo ai = factory.getAnnotationManager().getAnnotationInfoUsingFullClassName(fullClassName); // sets up metadata if not already done
+        if (ai == null) {
+            throw new PersistenceException("The class " + fullClassName + " is not an entity.");
+        }
+        //return tClass;
+        return ai.getMainClass();
     }
 
     public AmazonSimpleDB getSimpleDb() {
