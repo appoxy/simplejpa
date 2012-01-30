@@ -25,10 +25,11 @@ public abstract class AbstractQuery implements SimpleQuery {
     protected final Map<String, Object> parameters = new HashMap<String, Object>();
     protected int maxResults = -1;
     protected Class tClass;
-    protected boolean consistentRead = false;
+    private boolean consistentRead = false;
 
     public AbstractQuery(EntityManagerSimpleJPA em) {
         this.em = em;
+        this.consistentRead = em.isConsistentRead();
     }
 
     public int getMaxResults() {

@@ -350,7 +350,6 @@ public class QueryImpl extends AbstractQuery {
         String split[] = q.getFrom().split(" ");
         String obClass = split[0];
         tClass = em.ensureClassIsEntity(obClass);
-        consistentRead = em.isConsistentRead();
     }
 
     public void setForeignIds(Map<String, List<String>> foreignIds) {
