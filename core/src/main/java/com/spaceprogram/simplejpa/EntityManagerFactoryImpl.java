@@ -141,7 +141,7 @@ public class EntityManagerFactoryImpl implements EntityManagerFactory {
     // http://docs.amazonwebservices.com/AmazonS3/latest/dev/BucketRestrictions.html
     // If false, S3 bucket names are always forced to be lowercase.
     // If true, S3 bucket names can contain uppercase letters.
-	private boolean allowUppercaseBucketNames = false;
+	private boolean allowUppercaseBucketNames = true;
 
     /**
      * This one is generally called via the PersistenceProvider.
@@ -287,7 +287,7 @@ public class EntityManagerFactoryImpl implements EntityManagerFactory {
         s3Endpoint = MapUtils.getString(props, "s3Endpoint", DEFAULT_S3_ENDPOINT);
         s3Secure = MapUtils.getBoolean(props, "s3Secure", false);
         
-        allowUppercaseBucketNames = MapUtils.getBoolean(props, "allowUppercaseBucketNames", false);
+        allowUppercaseBucketNames = MapUtils.getBoolean(props, "allowUppercaseBucketNames", true);
 
         try {
             logger.info("Scanning for entity classes...");
