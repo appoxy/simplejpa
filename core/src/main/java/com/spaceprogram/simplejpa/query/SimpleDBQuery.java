@@ -6,6 +6,7 @@ import com.spaceprogram.simplejpa.EntityManagerSimpleJPA;
 import javax.persistence.Query;
 import javax.persistence.TemporalType;
 import java.util.*;
+import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -13,9 +14,11 @@ import java.util.regex.Pattern;
  * Kerry Wright
  */
 public class SimpleDBQuery extends AbstractQuery {
+    private static Logger logger = Logger.getLogger(SimpleDBQuery.class.getName());
+    
     private final String originalQuery;
     private static final Pattern COUNT_REGEX = Pattern.compile("select(\\s+.*\\s+)from\\s+.*", Pattern.CASE_INSENSITIVE);
-    private static final Pattern CLASS_REGEX = Pattern.compile(".*\\s+from\\s+([\\w|\\.]*)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern CLASS_REGEX = Pattern.compile(".*\\s+from\\s+([\\w|\\.]+)", Pattern.CASE_INSENSITIVE);
 
     public SimpleDBQuery(EntityManagerSimpleJPA em, String originalQuery, Class tClass) {
         super(em);
@@ -29,10 +32,18 @@ public class SimpleDBQuery extends AbstractQuery {
         this.originalQuery = originalQuery;
     }
 
-    static String extractClassFromQuery(String originalQuery) {
+    private static String extractClassFromQuery(String originalQuery) {
         Matcher m  = CLASS_REGEX.matcher(originalQuery);
-        if (!m.find()) throw new IllegalArgumentException("Could not determine domain class from query: "+originalQuery);
-        return m.group(1);
+        if (!m.find()) {
+        	throw new IllegalArgumentException("Could not determine domain class from query: " + originalQuery);
+        }
+        
+        final String className = m.group(1);
+        if(className == null || className.length() == 0)
+        {
+        	throw new IllegalArgumentException("Could not determine domain class from query: " + originalQuery);
+        }
+        return className;
     }
 
     @Override
@@ -40,15 +51,16 @@ public class SimpleDBQuery extends AbstractQuery {
         AmazonQueryString aq = createAmazonQuery();
         if(aq.isCount()) return Integer.parseInt(getSingleResult().toString());
 
-        String countQuery = convertToCountQuery(aq);
-        return Integer.parseInt(new SimpleDBQuery(em, countQuery).getSingleResult().toString());
+        String countQuery = convertToCountQuery();
+        
+        return Integer.parseInt(new SimpleDBQuery(em, countQuery, tClass).getSingleResult().toString());
     }
 
-    static String convertToCountQuery(AmazonQueryString aq) {
-        Matcher m = COUNT_REGEX.matcher(aq.getValue());
-        if (!m.find()) throw new IllegalArgumentException("Can not convert query to a count query: "+aq.getValue());
+    private String convertToCountQuery() {
+        Matcher m = COUNT_REGEX.matcher(originalQuery);
+        if (!m.find()) throw new IllegalArgumentException("Can not convert query to a count query: " + originalQuery);
         String replaceGroup = m.group(1);
-        return aq.getValue().replace(replaceGroup, " count(*) ");
+        return originalQuery.replace(replaceGroup, " count(*) ");
     }
 
     @Override
