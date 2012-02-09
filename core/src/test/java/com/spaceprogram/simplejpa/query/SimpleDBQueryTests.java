@@ -91,20 +91,20 @@ public class SimpleDBQueryTests extends UnitilsJUnit4 {
 
     @Test
     public void testConvertToCountQuery() {
-        AmazonQueryString aq = new AmazonQueryString("select * from DomainClass", false);
-        assertEquals("select count(*) from DomainClass", SimpleDBQuery.convertToCountQuery(aq));
+        String q = "select * from DomainClass";
+        assertEquals("select count(*) from DomainClass", SimpleDBQuery.convertToCountQuery(q));
     }
 
     @Test
     public void testConvertCountToCountQuery() {
-        AmazonQueryString aq = new AmazonQueryString("select count(*) from DomainClass", true);
-        assertEquals("select count(*) from DomainClass", SimpleDBQuery.convertToCountQuery(aq));
+    	String q = "select count(*) from DomainClass";
+        assertEquals("select count(*) from DomainClass", SimpleDBQuery.convertToCountQuery(q));
     }
 
     @Test
     public void testConvertFieldQueryToCount() {
-        AmazonQueryString aq = new AmazonQueryString("select itemName(), col1, col2 from DomainClass", true);
-        assertEquals("select count(*) from DomainClass", SimpleDBQuery.convertToCountQuery(aq));
+    	String q = "select itemName(), col1, col2 from DomainClass";
+        assertEquals("select count(*) from DomainClass", SimpleDBQuery.convertToCountQuery(q));
     }
 
     @Test
