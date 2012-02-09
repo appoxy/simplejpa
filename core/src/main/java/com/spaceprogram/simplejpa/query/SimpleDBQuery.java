@@ -32,7 +32,7 @@ public class SimpleDBQuery extends AbstractQuery {
         this.originalQuery = originalQuery;
     }
 
-    private static String extractClassFromQuery(String originalQuery) {
+    static String extractClassFromQuery(String originalQuery) {
         Matcher m  = CLASS_REGEX.matcher(originalQuery);
         if (!m.find()) {
         	throw new IllegalArgumentException("Could not determine domain class from query: " + originalQuery);
@@ -51,12 +51,12 @@ public class SimpleDBQuery extends AbstractQuery {
         AmazonQueryString aq = createAmazonQuery();
         if(aq.isCount()) return Integer.parseInt(getSingleResult().toString());
 
-        String countQuery = convertToCountQuery();
+        String countQuery = convertToCountQuery(originalQuery);
         
         return Integer.parseInt(new SimpleDBQuery(em, countQuery, tClass).getSingleResult().toString());
     }
 
-    private String convertToCountQuery() {
+    public static String convertToCountQuery(String originalQuery) {
         Matcher m = COUNT_REGEX.matcher(originalQuery);
         if (!m.find()) throw new IllegalArgumentException("Can not convert query to a count query: " + originalQuery);
         String replaceGroup = m.group(1);
