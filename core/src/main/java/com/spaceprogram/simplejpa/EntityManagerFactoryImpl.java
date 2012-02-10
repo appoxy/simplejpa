@@ -141,6 +141,12 @@ public class EntityManagerFactoryImpl implements EntityManagerFactory {
     private Cache cache;
     private String cacheClassname;
     private boolean consistentRead = true;
+    
+    // Amazon recommends using no uppercase letters in bucket names, see
+    // http://docs.amazonwebservices.com/AmazonS3/latest/dev/BucketRestrictions.html
+    // If false, S3 bucket names are always forced to be lowercase.
+    // If true, S3 bucket names can contain uppercase letters.
+	private boolean allowUppercaseBucketNames = true;
 
     /**
      * This one is generally called via the PersistenceProvider.
@@ -295,6 +301,8 @@ public class EntityManagerFactoryImpl implements EntityManagerFactory {
 
         s3Endpoint = MapUtils.getString(props, "s3Endpoint", DEFAULT_S3_ENDPOINT);
         s3Secure = MapUtils.getBoolean(props, "s3Secure", false);
+        
+        allowUppercaseBucketNames = MapUtils.getBoolean(props, "allowUppercaseBucketNames", true);
 
         if (null != libsToScan) {
             scanClasses(libsToScan);
@@ -599,8 +607,14 @@ public class EntityManagerFactoryImpl implements EntityManagerFactory {
             bucketName = lobBucketName;
         } else {
             bucketName = getPersistenceUnitName() + "-lobs";
+        	// AWS requires lower case S3 bucket names.
         }
-
+        
+    	if(!allowUppercaseBucketNames)
+    	{
+    		bucketName = bucketName.toLowerCase();
+    	}
+        
         // See if we have checked if the bucket already exists.
         if (!this.bucketSet.contains(bucketName)) {
 
