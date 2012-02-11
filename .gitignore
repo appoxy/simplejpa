@@ -7,3 +7,5 @@ core/.classpath
 core/.project
 core/.settings/
 core/target
+
+core/src/test/resources/simplejpa.properties
