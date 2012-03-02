@@ -291,7 +291,7 @@ public class EntityManagerFactoryImpl implements EntityManagerFactory {
         }
         config.setGroovyBeans(Boolean.parseBoolean((String) props.get("groovyBeans")));
         String consistentRead = (String) props.get("consistentRead");
-        this.consistentRead = consistentRead == null ? true : Boolean.parseBoolean((String) props.get("groovyBeans"));
+        this.consistentRead = consistentRead == null ? true : Boolean.parseBoolean(consistentRead);
         String prop = (String) props.get("threads");
         if (prop != null)
             numExecutorThreads = Integer.parseInt(prop);
