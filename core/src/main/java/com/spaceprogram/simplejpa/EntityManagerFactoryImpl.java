@@ -378,7 +378,7 @@ public class EntityManagerFactoryImpl implements EntityManagerFactory {
     }
 
     private void initSecondLevelCache() {
-        System.out.println("Initing second level cache: " + cacheFactoryClassname);
+        logger.info("Initing second level cache: " + cacheFactoryClassname);
         if (cacheFactoryClassname != null) {
             try {
                 Class<CacheFactory> cacheFactoryClass = (Class<CacheFactory>) Class.forName(cacheFactoryClassname);
